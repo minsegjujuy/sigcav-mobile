@@ -12,7 +12,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Se utiliza la cámara para capturar fotos de documentación (licencia y cédula).",
+        "NSPhotoLibraryUsageDescription": "Se utiliza la galería para seleccionar fotos de documentación (licencia y cédula).",
+        "NSPhotoLibraryAddUsageDescription": "Se utiliza para guardar fotos capturadas cuando sea necesario."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +26,13 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.seguridadvial_movil",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

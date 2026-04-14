@@ -1,13 +1,14 @@
-const ENV_API_URL_KEY = 'EXPO_PUBLIC_API_URL';
+import Constants from 'expo-constants';
 
 export function getApiBaseUrl(): string | null {
-  const raw = process?.env?.[ENV_API_URL_KEY];
+  const raw = process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL;
+
   if (!raw) return null;
+
   const normalized = raw.trim().replace(/\/+$/, '');
-  if (/\/api$/i.test(normalized)) return normalized;
-  return `${normalized}/api`;
+  return /\/api$/i.test(normalized) ? normalized : `${normalized}/api`;
 }
 
 export function getMissingApiBaseUrlMessage(): string {
-  return `Falta configurar ${ENV_API_URL_KEY} (por ejemplo en .env)`;
+  return 'Falta configurar EXPO_PUBLIC_API_URL (por ejemplo en .env)';
 }

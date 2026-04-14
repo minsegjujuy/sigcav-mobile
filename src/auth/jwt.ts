@@ -123,3 +123,24 @@ export function hasRole(jwt: string | null, role: string): boolean {
   const target = role.toUpperCase();
   return roles.includes(target) || roles.includes(`ROLE_${target}`);
 }
+
+export function getUsernameFromJwt(jwt: string | null): string | null {
+  const payload = decodeJwtPayload(jwt);
+  if (!payload) return null;
+
+  const candidates = [
+    payload.sub,
+    (payload as any).username,
+    (payload as any).user_name,
+    (payload as any).preferred_username,
+    (payload as any).email,
+  ];
+
+  for (const c of candidates) {
+    if (typeof c === 'string') {
+      const v = c.trim();
+      if (v) return v;
+    }
+  }
+  return null;
+}

@@ -70,6 +70,10 @@ export function actaResumenToActaRequest(acta: ActaResumenDto): ActaRequest {
     vehiculo: acta.vehiculo,
     adjunta: acta.adjunta,
     retencion: acta.retencion,
+    retencionVehiculo: acta.retencionVehiculo,
+    graduacionAlcoholica: 0,
+    infractorFugado: acta.infractorFugado,
+    juzgado: acta?.juzgado,
     ubicacionRequest: {
       departamento: acta.ubicacionResponse.departamento,
       lat: acta.ubicacionResponse.lat,

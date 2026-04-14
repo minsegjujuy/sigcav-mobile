@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Alert,
   Text,
   TextInput,
   View,
@@ -11,32 +12,112 @@ import { useAuth } from '../auth/AuthContext';
 import { HttpError } from '../api/http';
 import { Colors } from '../theme/colors';
 import { AppButton } from '../components/ui/AppButton';
+import { isBiometricEnabled } from '../auth/biometricStorage';
+import { useBiometricAuth } from '../auth/useBiometricAuth';
+import { saveJwt } from '../auth/secureJwtStorage';
+import { decodeJwtPayload } from '../auth/jwt';
+import { isHttpDebugEnabled } from '../api/httpDebug';
 
 export function LoginScreen() {
-  const { signIn } = useAuth();
+  const { authenticate, signInWithJwt } = useAuth();
+  const { handleBiometricLogin, handleEnrollment } = useBiometricAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isBioSubmitting, setIsBioSubmitting] = useState(false);
+  //const [error, setError] = useState<string | null>(null);
+  const [bioEnabled, setBioEnabled] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const enabled = await isBiometricEnabled();
+        if (!alive) return;
+        setBioEnabled(enabled);
+
+        // Login diario: si la biometria esta activa, intentamos loguear automaticamente al abrir la pantalla.
+        if (enabled) {
+          setIsBioSubmitting(true);
+          await handleBiometricLogin();
+        }
+      } catch {
+        if (alive) setBioEnabled(false);
+      } finally {
+        if (alive) setIsBioSubmitting(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit() {
-    setError(null);
+    //setError(null);
     setIsSubmitting(true);
     try {
-      await signIn(username.trim(), password);
+      const normalizedUsername = username.trim();
+      const jwt = await authenticate(normalizedUsername, password);
+
+      if (isHttpDebugEnabled()) {
+        // eslint-disable-next-line no-console
+        console.log('[AUTH] password jwt payload', decodeJwtPayload(jwt));
+      }
+
+      Alert.alert(
+        'Ingreso OK',
+        'Queres activar el ingreso con huella/cara para el login diario?',
+        [
+          {
+            text: 'Ahora no',
+            style: 'cancel',
+            onPress: () => {
+              void (async () => {
+                await saveJwt(jwt);
+                signInWithJwt(jwt);
+              })();
+            },
+          },
+          {
+            text: 'Activar',
+            onPress: () => {
+              void (async () => {
+                await handleEnrollment(normalizedUsername, jwt);
+                setBioEnabled(true);
+                await saveJwt(jwt);
+                signInWithJwt(jwt);
+              })();
+            },
+          },
+        ]
+      );
     } catch (e) {
       if (e instanceof HttpError) {
-        const bodyPreview = (e.bodyText ?? '').slice(0, 180);
-        setError(bodyPreview ? `${e.message}\n${bodyPreview}` : e.message);
+        //const bodyPreview = (e.bodyText ?? '').slice(0, 180);
+        //setError(bodyPreview ? `${e.message}\n${bodyPreview}` : e.message);
+        //setError(e.message);
       } else {
-        setError(e instanceof Error ? e.message : 'Error inesperado');
+        //setError(e instanceof Error ? e.message : 'Error inesperado');
+        console.log(e);
       }
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const canSubmit = username.trim().length > 0 && password.length > 0 && !isSubmitting;
+  async function onBiometricPress() {
+    //setError(null);
+    setIsBioSubmitting(true);
+    try {
+      await handleBiometricLogin();
+    } finally {
+      setIsBioSubmitting(false);
+    }
+  }
+
+  const canSubmit =
+    username.trim().length > 0 && password.length > 0 && !isSubmitting && !isBioSubmitting;
 
   return (
     <KeyboardAvoidingView
@@ -75,8 +156,6 @@ export function LoginScreen() {
           onSubmitEditing={onSubmit}
         />
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
         <View style={styles.actions}>
           <AppButton
             title="Ingresar"
@@ -85,6 +164,16 @@ export function LoginScreen() {
             disabled={!canSubmit}
             loading={isSubmitting}
           />
+          {bioEnabled ? (
+            <AppButton
+              title="Ingresar con huella"
+              icon="fingerprint"
+              variant="secondary"
+              onPress={onBiometricPress}
+              disabled={isSubmitting || isBioSubmitting}
+              loading={isBioSubmitting}
+            />
+          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>

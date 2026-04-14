@@ -1,11 +1,11 @@
 export function getAuthHeader(token: string | null): { headers?: Record<string, string> } {
-  if (token) {
+  const normalized = (token ?? '').trim();
+  if (normalized) {
     return {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${normalized}`,
       },
     };
   }
   return {};
 }
-

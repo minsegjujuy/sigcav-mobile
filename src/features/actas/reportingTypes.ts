@@ -33,6 +33,9 @@ export interface ActaResumenDto {
   nombre: string;
   adjunta: string;
   ubicacionResponse: UbicacionResponse;
+  retencionVehiculo: boolean;
+  juzgado?: number,
+  infractorFugado: boolean,
 }
 
 export interface DiasCantidad {

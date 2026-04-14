@@ -15,19 +15,29 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import type { PageResponse } from '../features/common/PageResponse';
 import type { ActaResumenDto } from '../features/actas/reportingTypes';
-import { descargarPdfActa, getResumenActas, getResumenActasPersonal } from '../services/ActaService';
+import { descargarPdfActa, getResumenActas, getResumenActasPersonal, obtenerZpl } from '../services/ActaService';
 import { useAuth } from '../auth/AuthContext';
-import { getRolFromJwt, getRolesFromJwt, hasRole } from '../auth/jwt';
+import { getRolFromJwt, getRolesFromJwt, getUsernameFromJwt, hasRole } from '../auth/jwt';
 import { Colors } from '../theme/colors';
 import { AppButton } from '../components/ui/AppButton';
 import type { ActaRequest } from '../features/actas/types';
 import { actaResumenToActaRequest } from '../utils/actaResumenToActaRequest';
+import { HttpError } from '../api/http';
+import { printTest } from './TestPrint';
+import { getSelectedPrinterAddress, sendPrintZpl } from '../services/BluetoothPrintService';
 
 export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest) => void }) {
   const { jwt } = useAuth();
+  const username = useMemo(() => getUsernameFromJwt(jwt), [jwt]);
   const rolClaim = useMemo(() => getRolFromJwt(jwt), [jwt]);
-  const isPersonal = useMemo(() => rolClaim === 'PERSONAL' || hasRole(jwt, 'PERSONAL'), [jwt, rolClaim]);
   const rolesDebug = useMemo(() => getRolesFromJwt(jwt), [jwt]);
+  const roleLabel = useMemo(() => rolClaim ?? rolesDebug[0] ?? null, [rolClaim, rolesDebug]);
+  const isPersonal = useMemo(() => {
+    // Si el token no trae roles/rol, preferimos el endpoint personal para evitar "Access Denied" en listados globales.
+    if (rolClaim === 'PERSONAL' || hasRole(jwt, 'PERSONAL')) return true;
+    if (rolesDebug.length === 0) return true;
+    return false;
+  }, [jwt, rolClaim, rolesDebug]);
 
   const [infractor, setInfractor] = useState('');
   const [nro, setNro] = useState('');
@@ -71,7 +81,7 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
         const result = String(reader.result ?? '');
         const commaIndex = result.indexOf(',');
         if (commaIndex === -1) {
-          reject(new Error('PDF base64 invÃ¡lido'));
+          reject(new Error('PDF base64 invalido'));
           return;
         }
         resolve(result.slice(commaIndex + 1));
@@ -101,7 +111,7 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
           dialogTitle: `Acta ${nro}`,
         });
       } else {
-        Alert.alert('PDF generado', `Se guardÃ³ en:\n${fileUri}`);
+        Alert.alert('PDF generado', `Se guardo en:\n${fileUri}`);
       }
     } catch (e) {
       console.log('MisActas: PDF error', e);
@@ -111,7 +121,22 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
     }
   }
 
+  async function generarZplActa(nro: string){
+    console.log('ingresó a zpl ')
+    const selected = await getSelectedPrinterAddress();
+     if (!selected) {
+      Alert.alert('Atención', 'Primero seleccioná una impresora');
+      return;
+    }
+    const text = await obtenerZpl(nro, jwt);
+    console.log('zpl ', text);
+    await sendPrintZpl(text, selected);
+    //printTest(text);
+  }
+
   useEffect(() => {
+    console.log("impresion")
+    //printTest();
     let isMounted = true;
 
     async function load() {
@@ -148,7 +173,12 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
       } catch (e) {
         if (!isMounted) return;
         console.log('MisActas: error', e);
-        setError(e instanceof Error ? e.message : 'Error cargando actas');
+        if (e instanceof HttpError) {
+          const bodyPreview = (e.bodyText ?? '').slice(0, 250);
+          setError(bodyPreview ? `${e.message}\n${bodyPreview}` : e.message);
+        } else {
+          setError(e instanceof Error ? e.message : 'Error cargando actas');
+        }
       } finally {
         if (!isMounted) return;
         setIsLoading(false);
@@ -175,6 +205,9 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
         <MaterialIcons name="receipt-long" size={20} color={Colors.primary} />
         <Text style={styles.title}>Mis actas</Text>
       </View>
+      <Text style={styles.welcome}>
+        Legajo: {username ?? '-'} - Rol: {roleLabel ?? '-'}
+      </Text>
 
       <View style={styles.filters}>
         <View style={styles.filterRow}>
@@ -262,6 +295,7 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
             }}
             onOpenMaps={() => openGoogleMaps(item.ubicacionResponse?.lat, item.ubicacionResponse?.lng)}
             onPdf={() => generarPdfActa(item.nro)}
+            onZpl={() => generarZplActa(item.nro)}
             isPdfBusy={pdfBusyNro === item.nro}
           />
         )}
@@ -299,12 +333,14 @@ function ActaCard({
   onOpenMaps,
   onPdf,
   isPdfBusy,
+  onZpl,
 }: {
   item: ActaResumenDto;
   onEdit: () => void;
   onOpenMaps: () => void;
   onPdf: () => void;
   isPdfBusy: boolean;
+  onZpl: () => void;
 }) {
   const infractorLabel = `${item.infractor?.apellido ?? ''} ${item.infractor?.nombre ?? ''}`.trim();
   const fecha = formatFechaForCard(item.fecha);
@@ -339,7 +375,7 @@ function ActaCard({
 
       <View style={styles.cardFooter}>
         {hasUb ? (
-          <AppButton title="UbicaciÃ³n" icon="location-on" iconOnly size="sm" variant="secondary" onPress={onOpenMaps} />
+          <AppButton title="Ubicacion" icon="location-on" iconOnly size="sm" variant="secondary" onPress={onOpenMaps} />
         ) : null}
         {item.nro ? (
           <AppButton
@@ -354,6 +390,7 @@ function ActaCard({
           />
         ) : null}
         <AppButton title="Editar" icon="edit" iconOnly size="sm" variant="secondary" onPress={onEdit} />
+        <AppButton title="Imprimir" icon="print" iconOnly size="sm" variant="secondary" onPress={onZpl} />
       </View>
     </View>
   );
@@ -372,6 +409,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12, backgroundColor: Colors.background },
   titleRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   title: { fontSize: 18, fontWeight: '900', color: Colors.textPrimary },
+  welcome: { fontSize: 13, fontWeight: '800', color: Colors.textSecondary },
   filters: {
     borderWidth: 1,
     borderColor: Colors.divider,

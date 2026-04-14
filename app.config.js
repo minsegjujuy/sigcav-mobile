@@ -1,6 +1,7 @@
-{
+const config  = {
   "expo": {
-    "name": "seguridadvial_movil",
+    "jsEngine": "hermes",
+    "name": "PERSONAL DE CALLE",
     "slug": "seguridadvial_movil",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,6 +21,12 @@
       }
     },
     "android": {
+      "permissions": [
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "jsEngine": "hermes",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -36,6 +43,17 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "83149d58-c3f3-4b11-aa32-5a8270cfb2ef"
+      },
+      EXPO_PUBLIC_API_URL: "https://tu-url-de-ngrok.ngrok-free.app"
     }
   }
 }
+
+export default config;

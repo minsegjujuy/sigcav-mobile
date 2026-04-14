@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../theme/colors';
 import { AppButton } from '../ui/AppButton';
 
@@ -22,6 +23,7 @@ export function MultiSelectPicker<T extends string | number>({
   onChangeValues: (values: T[]) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const summary = useMemo(() => {
     if (values.length === 0) return null;
@@ -47,7 +49,7 @@ export function MultiSelectPicker<T extends string | number>({
       <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
         <View style={styles.modalBackdrop}>
           <Pressable style={{ flex: 1 }} onPress={() => setIsOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -62,7 +64,7 @@ export function MultiSelectPicker<T extends string | number>({
               </View>
             </View>
 
-            <ScrollView>
+            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
               <View style={{ gap: 8 }}>
                 {options.map((o) => {
                   const isActive = values.includes(o.value);

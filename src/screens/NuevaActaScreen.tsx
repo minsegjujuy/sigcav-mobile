@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import type { ActaRequest } from '../features/actas/types';
+import type { ActaRequest, TestigoRequest } from '../features/actas/types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthContext';
 import { getGrupos } from '../services/GrupoService';
 import { getPuestos } from '../services/PuestoService';
@@ -32,10 +33,19 @@ import { SignaturePadSkia } from '../components/signature/SignaturePadSkia';
 import { PhotoPicker, type PhotoValue } from '../components/media/PhotoPicker';
 import { OcrService } from '../services/OcrService';
 import { actualizarActa, crearActa } from '../services/ActaService';
-import { Colors } from '../theme/colors';
 import { AppButton } from '../components/ui/AppButton';
+import * as Location from 'expo-location';
+import { obtenerJuzgadosParaActas, type Juzgado } from '../services/JuzgadoService';
+import { styles } from '../components/ui/styles';
+import { SelectField } from '../components/ui/SelectedFieldString';
+import { Field } from '../components/ui/Field';
+import { UbicacionSection } from '../components/map/UbicacionSection';
+import { Section } from '../components/ui/Section';
+import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
+import { TIPOS_INVOLUCRADOS } from './HechosVialesScreen';
 
 type ActaFormTabKey = 'acta' | 'infractor' | 'vehiculo' | 'firma';
+type DatePickerTarget = 'acta_fecha' | 'infractor_nacimiento' | 'licencia_expedicion' | 'licencia_vencimiento';
 
 export function NuevaActaScreen({
   editActa,
@@ -46,6 +56,7 @@ export function NuevaActaScreen({
 }) {
   const OTRO_VEHICULO_ID = -1;
   const [tab, setTab] = useState<ActaFormTabKey>('acta');
+  const insets = useSafeAreaInsets();
 
   const { jwt } = useAuth();
   const [deviceId] = useState(
@@ -56,7 +67,9 @@ export function NuevaActaScreen({
   const [tipos, setTipos] = useState<Tipo[]>([]);
   const [puestos, setPuestos] = useState<Puesto[]>([]);
   const [leyes, setLeyes] = useState<Ley[]>([]);
+  const [juzgados, setJuzgados] = useState<Juzgado[]>([]);
   const [articulosByLey, setArticulosByLey] = useState<Articulo[]>([]);
+  const [articulosById, setArticulosById] = useState<Record<number, Articulo>>({});
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(false);
   const [catalogsError, setCatalogsError] = useState<string | null>(null);
   const [isLoadingArticulos, setIsLoadingArticulos] = useState(false);
@@ -94,7 +107,7 @@ export function NuevaActaScreen({
   const [vehiculoDominio, setVehiculoDominio] = useState('');
   const [vehiculoMarca, setVehiculoMarca] = useState('');
   const [vehiculoModelo, setVehiculoModelo] = useState('');
-  const [vehiculoTipoRodado, setVehiculoTipoRodado] = useState('');
+  const [vehiculoTipoRodado, setVehiculoTipoRodado] = useState<string>('');
   const [vehiculoIdVeh, setVehiculoIdVeh] = useState<number | null>(null);
   const [vehiculosEncontrados, setVehiculosEncontrados] = useState<VehiculoBackend[]>([]);
   const [vehiculoSeleccionadoId, setVehiculoSeleccionadoId] = useState<number | null>(null);
@@ -109,6 +122,7 @@ export function NuevaActaScreen({
   const [ubicDescripcion, setUbicDescripcion] = useState('');
   const [ubicacionError, setUbicacionError] = useState<string | null>(null);
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [unidadesRegionales, setUnidadesRegionales] = useState<UnidadRegional[]>([]);
   const [localidades, setLocalidades] = useState<Localidad[]>([]);
   const [ubicUnidadRegional, setUbicUnidadRegional] = useState<number | null>(null);
@@ -118,6 +132,10 @@ export function NuevaActaScreen({
 
   const [adjuntaSeleccionadas, setAdjuntaSeleccionadas] = useState<string[]>([]);
   const [retencion, setRetencion] = useState('');
+  const [retencionVehiculo, setRetencionVehiculo] = useState(false);
+  const [graduacionAlcoholica, setGraduacionAlcoholica] = useState('');
+  const [infractorFugado, setInfractorFugado] = useState(false);
+  const [juzgadoId, setJuzgadoId] = useState<number | null>(null);
 
   const skipClearArticulosOnLeyChangeRef = useRef(false);
   const pendingInferLeyArticulosRef = useRef<number[] | null>(null);
@@ -125,6 +143,71 @@ export function NuevaActaScreen({
   const [firmaSeNegoAFirmar, setFirmaSeNegoAFirmar] = useState(false);
   const [firmaInfractorBase64, setFirmaInfractorBase64] = useState<string | null>(null);
   const [firmaOficialBase64, setFirmaOficialBase64] = useState('');
+  const [firmaTestigos, setFirmaTestigos] = useState<[TestigoRequest, TestigoRequest]>(() => [
+    { nombre: '', apellido: '', dni: '', domicilio: '' },
+    { nombre: '', apellido: '', dni: '', domicilio: '' },
+  ]);
+
+  function updateFirmaTestigo(index: 0 | 1, patch: Partial<TestigoRequest>) {
+    setFirmaTestigos((prev) => {
+      const next: [TestigoRequest, TestigoRequest] = [{ ...prev[0] }, { ...prev[1] }];
+      next[index] = { ...next[index], ...patch };
+      return next;
+    });
+  }
+
+  function openDatePicker(target: DatePickerTarget, mode: 'date' | 'datetime', currentText: string) {
+    const now = new Date();
+    const fallback = {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
+      hour: now.getHours(),
+      minute: now.getMinutes(),
+    };
+
+    const parsed = mode === 'datetime' ? parseDdMmYyyyHhMm(currentText) : parseDdMmYyyy(currentText);
+
+    setDatePicker({
+      target,
+      mode,
+      year: parsed?.year ?? fallback.year,
+      month: parsed?.month ?? fallback.month,
+      day: parsed?.day ?? fallback.day,
+      hour: mode === 'datetime' ? (parsed as any)?.hour ?? fallback.hour : fallback.hour,
+      minute: mode === 'datetime' ? (parsed as any)?.minute ?? fallback.minute : fallback.minute,
+      initialValueText: currentText,
+    });
+  }
+
+  function applyDatePickerValue(state: NonNullable<typeof datePicker>) {
+    const dd = String(state.day).padStart(2, '0');
+    const mm = String(state.month).padStart(2, '0');
+    const yyyy = String(state.year);
+    const dateText = `${dd}-${mm}-${yyyy}`;
+
+    if (state.mode === 'datetime') {
+      const hh = String(state.hour).padStart(2, '0');
+      const min = String(state.minute).padStart(2, '0');
+      setFecha(`${dateText} ${hh}:${min}`);
+      return;
+    }
+
+    switch (state.target) {
+      case 'infractor_nacimiento':
+        setInfractorFechaNacimiento(dateText);
+        return;
+      case 'licencia_expedicion':
+        setLicenciaFechaExpedicion(dateText);
+        return;
+      case 'licencia_vencimiento':
+        setLicenciaFechaVencimiento(dateText);
+        return;
+      case 'acta_fecha':
+        setFecha(dateText);
+        return;
+    }
+  }
 
   const [licenciaNacFoto, setLicenciaNacFoto] = useState<PhotoValue | null>(null);
   const [cedulaFrenteFoto, setCedulaFrenteFoto] = useState<PhotoValue | null>(null);
@@ -139,6 +222,24 @@ export function NuevaActaScreen({
   const [isSavingActa, setIsSavingActa] = useState(false);
   const [saveActaMessage, setSaveActaMessage] = useState<string | null>(null);
 
+  const [datePicker, setDatePicker] = useState<{
+    target: DatePickerTarget;
+    mode: 'date' | 'datetime';
+    year: number;
+    month: number; // 1-12
+    day: number; // 1-31
+    hour: number; // 0-23
+    minute: number; // 0-59
+    initialValueText: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!datePicker) return;
+    const maxDay = daysInMonth(datePicker.year, datePicker.month);
+    if (datePicker.day <= maxDay) return;
+    setDatePicker((prev) => (prev ? { ...prev, day: maxDay } : prev));
+  }, [datePicker?.year, datePicker?.month]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -146,17 +247,19 @@ export function NuevaActaScreen({
       setCatalogsError(null);
       setIsLoadingCatalogs(true);
       try {
-        const [gruposRes, tiposRes, puestosRes, leyesRes] = await Promise.all([
+        const [gruposRes, tiposRes, puestosRes, leyesRes, juzgadosRes] = await Promise.all([
           getGrupos(jwt),
           getAllTipoActas(jwt),
           getPuestos(jwt),
           getLeyes(jwt),
+          obtenerJuzgadosParaActas(jwt),
         ]);
         if (!isMounted) return;
         setGrupos(gruposRes);
         setTipos(tiposRes);
         setPuestos(puestosRes);
         setLeyes(leyesRes);
+        setJuzgados(juzgadosRes);
       } catch (e) {
         if (!isMounted) return;
         setCatalogsError(e instanceof Error ? e.message : 'Error cargando catálogos');
@@ -180,23 +283,19 @@ export function NuevaActaScreen({
       setArticulosByLey([]);
 
       if (!idLey) {
-        if (!pendingInferLeyArticulosRef.current) setArticulosSeleccionados([]);
         return;
       }
-
-      const shouldClearSelection = !skipClearArticulosOnLeyChangeRef.current;
-      skipClearArticulosOnLeyChangeRef.current = false;
-      if (shouldClearSelection) setArticulosSeleccionados([]);
 
       setIsLoadingArticulos(true);
       try {
         const data = await getArticulosByLey(idLey, jwt);
         if (!isMounted) return;
         setArticulosByLey(data);
-        if (!shouldClearSelection) {
-          const allowed = new Set(data.map((a) => a.idArt));
-          setArticulosSeleccionados((prev) => prev.filter((id) => allowed.has(id)));
-        }
+        setArticulosById((prev) => {
+          const next = { ...prev };
+          for (const a of data) next[a.idArt] = a;
+          return next;
+        });
       } catch (e) {
         if (!isMounted) return;
         setArticulosError(e instanceof Error ? e.message : 'Error cargando artÃ­culos');
@@ -363,6 +462,7 @@ export function NuevaActaScreen({
       setVehiculoDominio('');
       setVehiculoMarca('');
       setVehiculoModelo('');
+      setVehiculoTipoRodado('')
 
       setInfractorSearchMessage('Infractor encontrado.');
     } catch (e) {
@@ -408,6 +508,42 @@ export function NuevaActaScreen({
     setArticulosError('No se pudo determinar la ley para los artículos del acta. Seleccionala manualmente.');
   }
 
+  async function obtenerUbicacionActual() {
+    setUbicacionError(null);
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setUbicacionError('Permiso de ubicacion denegado. Habilitalo para obtener coordenadas.');
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const departamento = findDepartamento(lat, lng, DEPARTAMENTOS_JUJUY);
+      if (!departamento) {
+        setUbicacionError('La ubicacion detectada esta fuera de Jujuy. Ajustala manualmente en el mapa.');
+        setUbicLat(lat.toFixed(6));
+        setUbicLng(lng.toFixed(6));
+        setIsMapOpen(true);
+        return;
+      }
+
+      setUbicLat(lat.toFixed(6));
+      setUbicLng(lng.toFixed(6));
+      setUbicDepartamento(departamento);
+      setIsMapOpen(true);
+    } catch (e) {
+      setUbicacionError(e instanceof Error ? e.message : 'No se pudo obtener la ubicacion.');
+    } finally {
+      setIsLocating(false);
+    }
+  }
+
   function formatOcrError(context: string, err: unknown, photo: PhotoValue): string {
     const meta = `Documento: ${context}\nuri: ${photo.uri}\nfileName: ${photo.fileName ?? ''}\nmimeType: ${photo.mimeType ?? ''}`;
 
@@ -438,6 +574,23 @@ export function NuevaActaScreen({
       setSaveActaMessage('Falta completar fecha.');
       return;
     }
+    if (firmaSeNegoAFirmar) {
+      const normalized = firmaTestigos.map((t) => ({
+        nombre: (t.nombre ?? '').trim(),
+        apellido: (t.apellido ?? '').trim(),
+        dni: (t.dni ?? '').trim(),
+        domicilio: (t.domicilio ?? '').trim() || undefined,
+      }));
+
+      const isValid = normalized.length === 2 && normalized.every((t) => t.nombre && t.apellido && t.dni);
+      if (!isValid) {
+        setTab('firma');
+        setSaveActaMessage(
+          'Si el infractor se negó a firmar, debe cargar exactamente 2 testigos (nombre, apellido y DNI).'
+        );
+        return;
+      }
+    }
 
     setIsSavingActa(true);
     try {
@@ -446,13 +599,16 @@ export function NuevaActaScreen({
         ? await actualizarActa(actaDraft as ActaRequest, jwt)
         : await crearActa(actaDraft as ActaRequest, jwt);
       console.log(isEditing ? 'Acta actualizada:' : 'Acta creada:', saved);
+      SnackbarUtilities.success('Acta guardada exitosamente');
       setSaveActaMessage(
         `${isEditing ? 'Acta actualizada' : 'Acta enviada'}. idActa: ${(saved as any)?.idActa ?? '(sin id)'}`
       );
+      resetActaForm();
     } catch (e) {
       if (e instanceof HttpError) {
-        const body = (e.bodyText ?? '').slice(0, 2000);
-        setSaveActaMessage(`${e.message}\n\nBody:\n${body || '(vacío)'}`);
+        //const body = (e.bodyText ?? '').slice(0, 2000);
+        //setSaveActaMessage(`${e.message}\n\nBody:\n${body || '(vacío)'}`);
+        setSaveActaMessage('No se pudo guardar el acta');
       } else {
         setSaveActaMessage(e instanceof Error ? e.message : 'Error guardando acta.');
       }
@@ -475,6 +631,9 @@ export function NuevaActaScreen({
     setFecha(isoLocalDateTimeToDdMmYyyyHhMm(editActa.fecha ?? ''));
     setMotivo(editActa.motivo ?? null);
     setNro(editActa.nro ?? '');
+    setJuzgadoId(editActa.juzgado ?? 1)
+    setInfractorFugado(editActa.infractorFugado ?? false)
+    setRetencionVehiculo(editActa.retencionVehiculo ?? false)
     pendingInferLeyArticulosRef.current = (editActa.articulos ?? []).length ? (editActa.articulos ?? []) : null;
     setIdLey(null);
     setArticulosSeleccionados(editActa.articulos ?? []);
@@ -489,6 +648,11 @@ export function NuevaActaScreen({
         .filter(Boolean)
     );
     setRetencion(editActa.retencion ?? '');
+    setRetencionVehiculo(!!editActa.retencionVehiculo);
+    setGraduacionAlcoholica(editActa.graduacionAlcoholica ? String(editActa.graduacionAlcoholica) : '');
+    setInfractorFugado(!!editActa.infractorFugado);
+    const juzgadoRaw = (editActa as any)?.juzgado;
+    setJuzgadoId(typeof juzgadoRaw === 'number' && juzgadoRaw > 0 ? juzgadoRaw : null);
 
     const inf = editActa.infractor;
     setInfractorIdInfrac(inf?.idInfrac ?? null);
@@ -501,7 +665,7 @@ export function NuevaActaScreen({
     setInfractorProvincia(inf?.provincia ?? '');
     setInfractorFechaNacimiento(isoToDdMmYyyy(inf?.fechaNacimiento) ?? (inf?.fechaNacimiento ?? ''));
     setInfractorPropietario(!!inf?.propietario);
-
+    setInfractorPropietario(inf.propietario);
     setLicenciaId((inf as any)?.idLic ?? null);
     setLicenciaClase((inf as any)?.clase ?? '');
     setLicenciaNumero((inf as any)?.numero ?? '');
@@ -584,43 +748,21 @@ export function NuevaActaScreen({
     }
   }
 
-  async function procesarCedulaFrente() {
-    if (!cedulaFrenteFoto) return;
-
-    setOcrCedulaFrenteMessage(null);
-    setIsOcrCedulaFrenteBusy(true);
-    try {
-      console.log('OCR cedulaFrente: request', {
-        uri: cedulaFrenteFoto.uri,
-        fileName: cedulaFrenteFoto.fileName,
-        mimeType: cedulaFrenteFoto.mimeType,
-      });
-      const data = await OcrService.procesarCedulaFrente(cedulaFrenteFoto, jwt);
-      console.log('OCR cedulaFrente: response', data);
-
-      setVehiculoSeleccionadoId(OTRO_VEHICULO_ID);
-      setVehiculoIdVeh(null);
-      setVehiculoDominio((data.dominio ?? '').toString());
-      setVehiculoMarca((data.marca ?? '') as any);
-      setVehiculoModelo((data.modelo ?? '') as any);
-      setVehiculoTipoRodado(data.tipoRodado ?? '');
-
-      const prop = (data as any).propietario ?? null;
-      if (!infractorPropietario && prop) {
-        setPropietarioNombre(prop.nombre ?? '');
-        setPropietarioApellido(prop.apellido ?? '');
-        setPropietarioDni(prop.dni ?? '');
-        setPropietarioDireccion(prop.direccion ?? '');
-      }
-
-      setOcrCedulaFrenteMessage('Cédula (frente) procesada.');
-    } catch (e) {
-      console.log('OCR cedulaFrente: error', e);
-      setOcrCedulaFrenteMessage(formatOcrError('cédula (frente)', e, cedulaFrenteFoto));
-    } finally {
-      setIsOcrCedulaFrenteBusy(false);
-    }
-  }
+  async function procesarCedulaFrente() { 
+    if (!cedulaFrenteFoto) return; setOcrCedulaFrenteMessage(null); 
+    setIsOcrCedulaFrenteBusy(true); 
+    try { 
+      console.log('OCR cedulaFrente: request', 
+      { uri: cedulaFrenteFoto.uri, fileName: cedulaFrenteFoto.fileName, mimeType: cedulaFrenteFoto.mimeType, });
+       const data = await OcrService.procesarCedulaFrente(cedulaFrenteFoto, jwt); 
+       console.log('OCR cedulaFrente: response', data); 
+       setVehiculoSeleccionadoId(OTRO_VEHICULO_ID); setVehiculoIdVeh(null);
+        setVehiculoDominio((data.dominio ?? '').toString()); 
+        setVehiculoMarca((data.marca ?? '') as any); setVehiculoModelo((data.modelo ?? '') as any); 
+        setVehiculoTipoRodado(data.tipoRodado ?? ''); const prop = (data as any).propietario ?? null; 
+        if (!infractorPropietario && prop) { setPropietarioNombre(prop.nombre ?? ''); 
+          setPropietarioApellido(prop.apellido ?? ''); setPropietarioDni(prop.dni ?? ''); 
+          setPropietarioDireccion(prop.direccion ?? ''); } setOcrCedulaFrenteMessage('Cédula (frente) procesada.'); } catch (e) { console.log('OCR cedulaFrente: error', e); setOcrCedulaFrenteMessage(formatOcrError('cédula (frente)', e, cedulaFrenteFoto)); } finally { setIsOcrCedulaFrenteBusy(false); } }
 
   async function procesarCedulaDorso() {
     if (!cedulaDorsoFoto) return;
@@ -683,6 +825,15 @@ export function NuevaActaScreen({
         ? firmaInfractorBase64.trim()
         : null;
 
+    const testigos = firmaSeNegoAFirmar
+      ? firmaTestigos.map((t) => ({
+          nombre: (t.nombre ?? '').trim(),
+          apellido: (t.apellido ?? '').trim(),
+          dni: (t.dni ?? '').trim(),
+          domicilio: (t.domicilio ?? '').trim() || undefined,
+        }))
+      : [];
+
     return {
       actaId: 0,
       latitud: ubicLat || '',
@@ -690,9 +841,94 @@ export function NuevaActaScreen({
       deviceId,
       seNegoAFirmar: firmaSeNegoAFirmar,
       firmaInfractorBase64: infractor,
+      testigos,
       firmaOficialBase64: oficial,
     };
-  }, [deviceId, firmaInfractorBase64, firmaOficialBase64, firmaSeNegoAFirmar, ubicLat, ubicLng]);
+  }, [
+    deviceId,
+    firmaInfractorBase64,
+    firmaOficialBase64,
+    firmaSeNegoAFirmar,
+    firmaTestigos,
+    ubicLat,
+    ubicLng,
+  ]);
+
+  const requiresGraduacionAlcoholica = useMemo(() => {
+    for (const id of articulosSeleccionados) {
+      const a = articulosById[id];
+      if (!a) continue;
+      if ((a.nro ?? '').trim() === 'ART 2 Y 6') return true;
+    }
+    return false;
+  }, [articulosById, articulosSeleccionados]);
+
+  const graduacionAlcoholicaValue = useMemo(() => {
+    if (!requiresGraduacionAlcoholica) return 0;
+    return toNumberOrFallback(graduacionAlcoholica, 0);
+  }, [graduacionAlcoholica, requiresGraduacionAlcoholica]);
+
+  const resetActaForm = () => {
+  // Datos Generales
+  setIdActa(0);
+  setIdGrupo(0);
+  setIdTipo(0);
+  setIdPuesto(0);
+  setFecha(''); // O la fecha por defecto que uses
+  setMotivo("");
+  setNro("");
+  setArticulosSeleccionados([]);
+
+  // Infractor
+  setInfractorNombre("");
+  setInfractorApellido("");
+  setInfractorDni("");
+  setInfractorIdInfrac(0);
+  setInfractorNacionalidad("");
+  setInfractorDomicilio("");
+  setInfractorLocalidad("");
+  setInfractorProvincia("");
+  setInfractorPropietario(false);
+  setInfractorFechaNacimiento('');
+
+  // Licencia
+  setLicenciaId(0);
+  setLicenciaClase("");
+  setLicenciaNumero("");
+  setLicenciaAutoridadExpedicion("");
+  setLicenciaFechaExpedicion('');
+  setLicenciaFechaVencimiento('');
+
+  // Vehículo
+  setVehiculoIdVeh(0);
+  setVehiculoDominio("");
+  setVehiculoMarca("");
+  setVehiculoModelo("");
+  setVehiculoTipoRodado("");
+
+  // Propietario
+  setPropietarioNombre("");
+  setPropietarioApellido("");
+  setPropietarioDni("");
+  setPropietarioDireccion("");
+
+  // Ubicación
+  setUbicLat('');
+  setUbicLng("");
+  setUbicDepartamento('');
+  setUbicUnidadRegional(0);
+  setUbicLocalidad(0);
+  setUbicDescripcion('');
+
+  // Otros y Firma
+  setAdjuntaSeleccionadas([]);
+  setRetencion('');
+  setRetencionVehiculo(false);
+  setGraduacionAlcoholica('');
+  setInfractorFugado(false);
+  setJuzgadoId(0);
+  //setFirmaDto('');
+};
 
   const actaDraft = useMemo(() => {
     return buildActaRequestSafe({
@@ -737,6 +973,10 @@ export function NuevaActaScreen({
       ubicDescripcion,
       adjunta: adjuntaSeleccionadas,
       retencion,
+      retencionVehiculo,
+      graduacionAlcoholica: graduacionAlcoholicaValue,
+      infractorFugado,
+      juzgado: juzgadoId ?? 0,
       firma: firmaDto,
     });
   }, [
@@ -781,6 +1021,10 @@ export function NuevaActaScreen({
     ubicDescripcion,
     adjuntaSeleccionadas,
     retencion,
+    retencionVehiculo,
+    graduacionAlcoholicaValue,
+    infractorFugado,
+    juzgadoId,
     firmaDto,
   ]);
 
@@ -803,6 +1047,22 @@ export function NuevaActaScreen({
     [puestos]
   );
   const leyOptions = useMemo(() => leyes.map((l) => ({ value: l.idLey, label: l.nro })), [leyes]);
+  const juzgadoOptions = useMemo(
+    () =>
+      juzgados
+        .filter((j) => j.id != null)
+        .map((j) => ({ value: j.id as number, label: j.nombre })),
+    [juzgados]
+  );
+  const articulosOptions = useMemo(() => {
+    const list = Object.values(articulosById);
+    list.sort((a, b) => {
+      const an = (a.nro ?? '').localeCompare(b.nro ?? '');
+      if (an !== 0) return an;
+      return (a.detalle ?? '').localeCompare(b.detalle ?? '');
+    });
+    return list;
+  }, [articulosById]);
   const motivoOptions = useMemo(
     () =>
       [
@@ -835,7 +1095,16 @@ export function NuevaActaScreen({
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingBottom: 180 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
       <Text style={styles.title}>NUEVA ACTA</Text>
 
       <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={isEditing} />
@@ -891,11 +1160,24 @@ export function NuevaActaScreen({
             disabled={isLoadingCatalogs}
             allowClear
           />
-          <Field
-            label="fecha (DD-MM-YYYY HH:MM)"
-            value={fecha}
-            onChangeText={(t) => setFecha(formatDateTimeDdMmYyyyHhMm(t))}
-            placeholder="17-03-2026 14:30"
+          <SelectField
+            label="Juzgado"
+            placeholder="Seleccioná un juzgado"
+            value={juzgadoId}
+            options={juzgadoOptions}
+            onChangeValue={setJuzgadoId}
+            disabled={isLoadingCatalogs}
+            allowClear
+          />
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>infractor fugado</Text>
+            <Switch value={infractorFugado} onValueChange={setInfractorFugado} />
+          </View>
+          <PickerField
+            label="fecha"
+            valueText={fecha}
+            placeholder="Selecciona fecha y hora"
+            onPress={() => openDatePicker('acta_fecha', 'datetime', fecha)}
           />
           <SelectFieldString
             label="Motivo"
@@ -930,88 +1212,59 @@ export function NuevaActaScreen({
           {isLoadingArticulos ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator />
-              <Text style={styles.loadingText}>Cargando artÃ­culos...</Text>
+              <Text style={styles.loadingText}>Cargando arti­culos...</Text>
             </View>
           ) : null}
 
           {articulosError ? <Text style={styles.errorText}>{articulosError}</Text> : null}
 
-          {articulosByLey.length > 0 ? (
+          {articulosOptions.length > 0 ? (
             <MultiSelectPicker
               label="Articulos"
               placeholder="Seleccionar arti­culos"
               values={articulosSeleccionados}
-              options={articulosByLey.map((a) => ({ value: a.idArt, label: `${a.nro}: ${a.detalle}` }))}
+              options={articulosOptions.map((a) => ({ value: a.idArt, label: `${a.nro}: ${a.detalle}` }))}
               onChangeValues={setArticulosSeleccionados}
+            />
+          ) : null}
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Retencion de vehi­culo</Text>
+            <Switch value={retencionVehiculo} onValueChange={setRetencionVehiculo} />
+          </View>
+
+          {requiresGraduacionAlcoholica ? (
+            <Field
+              label="graduacion alcoholica"
+              value={graduacionAlcoholica}
+              onChangeText={setGraduacionAlcoholica}
+              placeholder="0.00"
+              keyboardType="numeric"
             />
           ) : null}
         </Section>
       ) : null}
 
       {tab === 'acta' ? (
-        <Section title="Ubicación">
-          <View style={{ gap: 10 }}>
-            <AppButton title="Seleccionar punto" icon="map" onPress={() => setIsMapOpen(true)} />
-
-            {ubicacionError ? <Text style={styles.errorText}>{ubicacionError}</Text> : null}
-
-            {ubicLat && ubicLng ? (
-              <Text style={styles.helperText}>
-                Lat: {ubicLat} | Lng: {ubicLng} {ubicDepartamento ? `| Depto: ${ubicDepartamento}` : ''}
-              </Text>
-            ) : (
-              <Text style={styles.helperText}>Todavia no seleccionaste una ubicacion.</Text>
-            )}
-          </View>
-
-          {ubicDepartamento ? (
-            <View style={{ gap: 10 }}>
-              {isLoadingUr ? (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator />
-                  <Text style={styles.loadingText}>Cargando unidades regionales...</Text>
-                </View>
-              ) : null}
-
-              {urError ? <Text style={styles.errorText}>{urError}</Text> : null}
-
-              {unidadesRegionales.length > 0 ? (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.label}>Selecciona una unidad regional *</Text>
-                  {unidadesRegionales.map((u) => {
-                    const isSelected = u.idUr === ubicUnidadRegional;
-                    return (
-                      <Pressable
-                        key={u.idUr}
-                        onPress={() => {
-                          setUbicUnidadRegional(u.idUr);
-                          setUbicLocalidad(null);
-                        }}
-                        style={[styles.optionRow, isSelected ? styles.optionRowActive : null]}
-                      >
-                        <Text style={styles.optionText}>{isSelected ? `● ${u.nombre}` : `○ ${u.nombre}`}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : null}
-
-              {ubicUnidadRegional ? (
-                <SelectField
-                  label="Localidad"
-                  placeholder="Selecciona una localidad"
-                  value={ubicLocalidad}
-                  options={localidades.map((l) => ({ value: l.id, label: l.nombre }))}
-                  onChangeValue={setUbicLocalidad}
-                  disabled={!localidades.length}
-                  allowClear
-                />
-              ) : null}
-            </View>
-          ) : null}
-
-          <Field label="describir ubicacion" value={ubicDescripcion} onChangeText={setUbicDescripcion} />
-        </Section>
+        <UbicacionSection
+          ubicLat={ubicLat}
+          ubicLng={ubicLng}
+          ubicDepartamento={ubicDepartamento}
+          ubicUnidadRegional={ubicUnidadRegional}
+          ubicLocalidad={ubicLocalidad}
+          ubicDescripcion={ubicDescripcion}
+          isLocating={isLocating}
+          isLoadingUr={isLoadingUr}
+          ubicacionError={ubicacionError}
+          urError={urError}
+          unidadesRegionales={unidadesRegionales}
+          localidades={localidades}
+          setIsMapOpen={setIsMapOpen}
+          obtenerUbicacionActual={obtenerUbicacionActual}
+          setUbicUnidadRegional={setUbicUnidadRegional}
+          setUbicLocalidad={setUbicLocalidad}
+          setUbicDescripcion={setUbicDescripcion}
+        />
       ) : null}
 
       <MapaJujuyLeaflet
@@ -1061,7 +1314,8 @@ export function NuevaActaScreen({
             onChangeValues={setAdjuntaSeleccionadas}
           />
 
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: 10 }}>
+            <View style={{ gap: 6 }}>
             <Text style={styles.label}>dni</Text>
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
               <TextInput
@@ -1082,25 +1336,6 @@ export function NuevaActaScreen({
             </View>
             {infractorSearchMessage ? <Text style={styles.helperText}>{infractorSearchMessage}</Text> : null}
           </View>
-          <Field label="nombre" value={infractorNombre} onChangeText={setInfractorNombre} />
-          <Field label="apellido" value={infractorApellido} onChangeText={setInfractorApellido} />
-          <Field
-            label="nacionalidad"
-            value={infractorNacionalidad}
-            onChangeText={setInfractorNacionalidad}
-          />
-          <Field label="domicilio" value={infractorDomicilio} onChangeText={setInfractorDomicilio} />
-          <Field label="localidad" value={infractorLocalidad} onChangeText={setInfractorLocalidad} />
-          <Field label="provincia" value={infractorProvincia} onChangeText={setInfractorProvincia} />
-          <Field
-            label="fechaNacimiento (DD-MM-YYYY)"
-            value={infractorFechaNacimiento}
-            onChangeText={setInfractorFechaNacimiento}
-            placeholder="17-03-1990"
-          />
-
-          <View style={{ gap: 10 }}>
-            <Text style={styles.sectionTitle}>Licencia</Text>
 
             <PhotoPicker label="Licencia nacional (foto)" value={licenciaNacFoto} onChange={setLicenciaNacFoto} />
             <AppButton
@@ -1124,19 +1359,37 @@ export function NuevaActaScreen({
               value={licenciaAutoridadExpedicion}
               onChangeText={setLicenciaAutoridadExpedicion}
             />
-            <Field
-              label="fechaExpedicion (DD-MM-YYYY)"
-              value={licenciaFechaExpedicion}
-              onChangeText={setLicenciaFechaExpedicion}
-              placeholder="17-03-2026"
+            <PickerField
+              label="fechaExpedicion"
+              valueText={licenciaFechaExpedicion}
+              placeholder="Selecciona una fecha"
+              onPress={() => openDatePicker('licencia_expedicion', 'date', licenciaFechaExpedicion)}
             />
-            <Field
-              label="fechaVencimiento (DD-MM-YYYY)"
-              value={licenciaFechaVencimiento}
-              onChangeText={setLicenciaFechaVencimiento}
-              placeholder="17-03-2028"
+            <PickerField
+              label="fechaVencimiento"
+              valueText={licenciaFechaVencimiento}
+              placeholder="Selecciona una fecha"
+              onPress={() => openDatePicker('licencia_vencimiento', 'date', licenciaFechaVencimiento)}
             />
           </View>
+
+          
+          <Field label="nombre" value={infractorNombre} onChangeText={setInfractorNombre} />
+          <Field label="apellido" value={infractorApellido} onChangeText={setInfractorApellido} />
+          <Field
+            label="nacionalidad"
+            value={infractorNacionalidad}
+            onChangeText={setInfractorNacionalidad}
+          />
+          <Field label="domicilio" value={infractorDomicilio} onChangeText={setInfractorDomicilio} />
+          <Field label="localidad" value={infractorLocalidad} onChangeText={setInfractorLocalidad} />
+          <Field label="provincia" value={infractorProvincia} onChangeText={setInfractorProvincia} />
+          <PickerField
+            label="fechaNacimiento"
+            valueText={infractorFechaNacimiento}
+            placeholder="Selecciona una fecha"
+            onPress={() => openDatePicker('infractor_nacimiento', 'date', infractorFechaNacimiento)}
+          />
         </Section>
       ) : null}
 
@@ -1159,7 +1412,7 @@ export function NuevaActaScreen({
               </Text>
             ) : null}
 
-            {!infractorPropietario ? (
+            {false ? (
               <>
                 <PhotoPicker label="Cédula (dorso)" value={cedulaDorsoFoto} onChange={setCedulaDorsoFoto} />
                 <AppButton
@@ -1171,7 +1424,9 @@ export function NuevaActaScreen({
                   disabled={!cedulaDorsoFoto || isOcrCedulaDorsoBusy}
                 />
                 {ocrCedulaDorsoMessage ? (
-                  <Text style={ocrCedulaDorsoMessage.includes('HTTP') ? styles.errorText : styles.helperText}>
+                  <Text
+                    style={(ocrCedulaDorsoMessage ?? '').includes('HTTP') ? styles.errorText : styles.helperText}
+                  >
                     {ocrCedulaDorsoMessage}
                   </Text>
                 ) : null}
@@ -1236,11 +1491,17 @@ export function NuevaActaScreen({
           <Field label="dominio" value={vehiculoDominio} onChangeText={setVehiculoDominio} />
           <Field label="marca (opcional)" value={vehiculoMarca} onChangeText={setVehiculoMarca} />
           <Field label="modelo (opcional)" value={vehiculoModelo} onChangeText={setVehiculoModelo} />
-          <Field
-            label="tipoRodado (opcional)"
-            value={vehiculoTipoRodado}
-            onChangeText={setVehiculoTipoRodado}
-          />
+          <SelectFieldString
+              label="Tipo de rodado (opcional)"
+              placeholder="Seleccionar tipo"
+              value={vehiculoTipoRodado}
+              options={TIPOS_INVOLUCRADOS.map((tipo) => ({
+                value: tipo,
+                label: tipo,
+              }))}
+              // Si llega null, guardamos un string vacío para mantener la compatibilidad
+              onChangeValue={(val) => setVehiculoTipoRodado(val ?? '')}
+            />
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>infractor es propietario</Text>
             <Switch value={infractorPropietario} onValueChange={setInfractorPropietario} />
@@ -1248,8 +1509,21 @@ export function NuevaActaScreen({
           {!infractorPropietario ? (
             <View style={{ gap: 10 }}>
               <Text style={styles.sectionTitle}>Propietario</Text>
-              <Field label="nombre" value={propietarioNombre} onChangeText={setPropietarioNombre} />
-              <Field label="apellido (opcional)" value={propietarioApellido} onChangeText={setPropietarioApellido} />
+              <PhotoPicker label="Cedula (dorso)" value={cedulaDorsoFoto} onChange={setCedulaDorsoFoto} />
+              <AppButton
+                title="Procesar"
+                icon="document-scanner"
+                size="sm"
+                onPress={procesarCedulaDorso}
+                loading={isOcrCedulaDorsoBusy}
+                disabled={!cedulaDorsoFoto || isOcrCedulaDorsoBusy}
+              />
+              {ocrCedulaDorsoMessage ? (
+                <Text style={(ocrCedulaDorsoMessage ?? '').includes('HTTP') ? styles.errorText : styles.helperText}>
+                  {ocrCedulaDorsoMessage}
+                </Text>
+              ) : null}
+              <Field label="apellido y nombre" value={propietarioNombre} onChangeText={setPropietarioNombre} />
               <Field label="dni" value={propietarioDni} onChangeText={setPropietarioDni} keyboardType="numeric" />
               <Field label="direccion" value={propietarioDireccion} onChangeText={setPropietarioDireccion} />
             </View>
@@ -1270,6 +1544,56 @@ export function NuevaActaScreen({
             />
           </View>
 
+          {firmaSeNegoAFirmar ? (
+            <View style={{ gap: 12 }}>
+              <Text style={styles.sectionTitle}>Testigo 1</Text>
+              <Field
+                label="nombre"
+                value={firmaTestigos[0].nombre ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { nombre: v })}
+              />
+              <Field
+                label="apellido"
+                value={firmaTestigos[0].apellido ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { apellido: v })}
+              />
+              <Field
+                label="dni"
+                value={firmaTestigos[0].dni ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { dni: v })}
+                keyboardType="numeric"
+              />
+              <Field
+                label="domicilio"
+                value={firmaTestigos[0].domicilio ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { domicilio: v })}
+              />
+
+              <Text style={styles.sectionTitle}>Testigo 2</Text>
+              <Field
+                label="nombre"
+                value={firmaTestigos[1].nombre ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { nombre: v })}
+              />
+              <Field
+                label="apellido"
+                value={firmaTestigos[1].apellido ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { apellido: v })}
+              />
+              <Field
+                label="dni"
+                value={firmaTestigos[1].dni ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { dni: v })}
+                keyboardType="numeric"
+              />
+              <Field
+                label="domicilio (opcional)"
+                value={firmaTestigos[1].domicilio ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { domicilio: v })}
+              />
+            </View>
+          ) : null}
+
           {!firmaSeNegoAFirmar ? (
             <SignaturePadSkia
               label="Firma infractor"
@@ -1287,115 +1611,104 @@ export function NuevaActaScreen({
           </Text>
         </Section>
       ) : null}
-    </ScrollView>
+
+      <Modal
+        visible={!!datePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDatePicker(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={{ flex: 1 }} onPress={() => setDatePicker(null)} />
+          <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {datePicker?.target === 'acta_fecha'
+                  ? 'Fecha del acta'
+                  : datePicker?.target === 'infractor_nacimiento'
+                    ? 'Fecha de nacimiento'
+                    : datePicker?.target === 'licencia_expedicion'
+                      ? 'Fecha de expedicion'
+                      : 'Fecha de vencimiento'}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <AppButton title="Cerrar" icon="close" variant="ghost" size="sm" onPress={() => setDatePicker(null)} />
+              </View>
+            </View>
+
+            {datePicker ? (
+              <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
+                <View style={{ gap: 12 }}>
+                  <StepperRow
+                    label="Di­a"
+                    value={datePicker.day}
+                    min={1}
+                    max={daysInMonth(datePicker.year, datePicker.month)}
+                    onChange={(day) => setDatePicker((p) => (p ? { ...p, day } : p))}
+                  />
+                  <StepperRow
+                    label="Mes"
+                    value={datePicker.month}
+                    min={1}
+                    max={12}
+                    onChange={(month) => setDatePicker((p) => (p ? { ...p, month } : p))}
+                  />
+                  <StepperRow
+                    label="Año"
+                    value={datePicker.year}
+                    min={1900}
+                    max={new Date().getFullYear() + 1}
+                    onChange={(year) => setDatePicker((p) => (p ? { ...p, year } : p))}
+                  />
+
+                  {datePicker.mode === 'datetime' ? (
+                    <>
+                      <StepperRow
+                        label="Hora"
+                        value={datePicker.hour}
+                        min={0}
+                        max={23}
+                        onChange={(hour) => setDatePicker((p) => (p ? { ...p, hour } : p))}
+                      />
+                      <StepperRow
+                        label="Minutos"
+                        value={datePicker.minute}
+                        min={0}
+                        max={59}
+                        step={5}
+                        onChange={(minute) => setDatePicker((p) => (p ? { ...p, minute } : p))}
+                      />
+                    </>
+                  ) : null}
+
+                  <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end' }}>
+                    <AppButton
+                      title="Cancelar"
+                      icon="close"
+                      variant="secondary"
+                      onPress={() => setDatePicker(null)}
+                    />
+                    <AppButton
+                      title="Aceptar"
+                      icon="check"
+                      onPress={() => {
+                        if (!datePicker) return;
+                        applyDatePickerValue(datePicker);
+                        setDatePicker(null);
+                      }}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, gap: 14, backgroundColor: Colors.background },
-  title: { fontSize: 18, fontWeight: '900', color: Colors.textPrimary },
-  tabs: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 6,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    backgroundColor: Colors.surface,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  tabInactive: {
-    backgroundColor: Colors.white,
-    borderColor: Colors.divider,
-  },
-  tabText: { fontSize: 11, fontWeight: '800' },
-  tabTextActive: { color: Colors.white },
-  tabTextInactive: { color: Colors.primary },
-  errorText: { color: Colors.danger, fontWeight: '800' },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  loadingText: { color: Colors.textSecondary, fontWeight: '700' },
-  section: {
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 18,
-    padding: 12,
-    backgroundColor: Colors.surface,
-    gap: 10,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '900', color: Colors.textPrimary },
-  label: { fontSize: 13, fontWeight: '900', color: Colors.textPrimary },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: Colors.white,
-    color: Colors.textPrimary,
-  },
-  inputDisabled: {
-    backgroundColor: '#f2f2f2',
-  },
-  helperText: { color: Colors.textSecondary, fontWeight: '700' },
-  selectBox: {
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: Colors.white,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  selectText: { fontSize: 16, color: Colors.textPrimary, flexShrink: 1 },
-  selectPlaceholder: { fontSize: 16, color: Colors.textSecondary, flexShrink: 1 },
-  selectChevron: { fontSize: 16, fontWeight: '900', color: Colors.primary },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 12,
-    maxHeight: '70%',
-    gap: 10,
-  },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: Colors.textPrimary },
-  optionRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  optionRowActive: { borderColor: Colors.primary, backgroundColor: Colors.lightPrimary },
-  optionText: { fontSize: 15, fontWeight: '800', color: Colors.textPrimary },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  switchLabel: { fontSize: 13, fontWeight: '900', color: Colors.textPrimary },
-});
 
 function ActaTabs({
   tab,
@@ -1460,39 +1773,71 @@ function TabButton({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function PickerField({
+  label,
+  valueText,
+  placeholder,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  valueText: string;
+  placeholder: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const hasValue = !!valueText.trim();
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
+    <View style={{ gap: 6 }}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        style={[styles.selectBox, disabled ? { opacity: 0.6 } : null]}
+      >
+        <Text style={hasValue ? styles.selectText : styles.selectPlaceholder} numberOfLines={1}>
+          {hasValue ? valueText : placeholder}
+        </Text>
+        <Text style={styles.selectChevron}>v</Text>
+      </Pressable>
     </View>
   );
 }
 
-function Field({
+function StepperRow({
   label,
   value,
-  onChangeText,
-  placeholder,
-  keyboardType,
+  onChange,
+  min,
+  max,
+  step,
 }: {
   label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-  keyboardType?: 'default' | 'numeric';
+  value: number;
+  onChange: (next: number) => void;
+  min: number;
+  max: number;
+  step?: number;
 }) {
+  const inc = step ?? 1;
   return (
-    <View style={{ gap: 6 }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        style={styles.input}
-        keyboardType={keyboardType}
-        autoCapitalize="none"
-      />
+    <View style={styles.stepperRow}>
+      <Text style={styles.stepperLabel}>{label}</Text>
+      <View style={styles.stepperControls}>
+        <Pressable
+          style={styles.stepperButton}
+          onPress={() => onChange(clampNumber(value - inc, min, max))}
+        >
+          <Text style={styles.stepperButtonText}>-</Text>
+        </Pressable>
+        <Text style={styles.stepperValue}>{String(value).padStart(2, '0')}</Text>
+        <Pressable
+          style={styles.stepperButton}
+          onPress={() => onChange(clampNumber(value + inc, min, max))}
+        >
+          <Text style={styles.stepperButtonText}>+</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -1507,6 +1852,49 @@ function toNumberOrNull(value: string): number | null {
 function toNumberOrFallback(value: string, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function daysInMonth(year: number, month1Based: number): number {
+  const m = clampNumber(month1Based, 1, 12);
+  return new Date(year, m, 0).getDate();
+}
+
+function parseDdMmYyyy(input: string): { day: number; month: number; year: number } | null {
+  const raw = (input ?? '').trim();
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(raw);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) return null;
+  if (year < 1900 || year > 2100) return null;
+  if (month < 1 || month > 12) return null;
+  const maxDay = daysInMonth(year, month);
+  if (day < 1 || day > maxDay) return null;
+  return { day, month, year };
+}
+
+function parseDdMmYyyyHhMm(
+  input: string
+): { day: number; month: number; year: number; hour: number; minute: number } | null {
+  const raw = (input ?? '').trim();
+  const m = /^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})$/.exec(raw);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  if (![day, month, year, hour, minute].every((n) => Number.isFinite(n))) return null;
+  if (hour < 0 || hour > 23) return null;
+  if (minute < 0 || minute > 59) return null;
+  const datePart = parseDdMmYyyy(`${m[1]}-${m[2]}-${m[3]}`);
+  if (!datePart) return null;
+  return { ...datePart, hour, minute };
 }
 
 function parseArticulosCsv(csv: string): number[] {
@@ -1560,6 +1948,10 @@ function buildActaRequestSafe(input: {
   ubicDescripcion: string;
   adjunta: string[];
   retencion: string;
+  retencionVehiculo: boolean;
+  graduacionAlcoholica: number;
+  infractorFugado: boolean;
+  juzgado: number;
   firma?: ActaRequest['firma'];
 }): Partial<ActaRequest> {
   const idPuestoValue = input.idPuesto ?? undefined;
@@ -1621,88 +2013,12 @@ function buildActaRequestSafe(input: {
     },
     adjunta: input.adjunta.join(','),
     retencion: input.retencion,
+    retencionVehiculo: input.retencionVehiculo,
+    graduacionAlcoholica: input.graduacionAlcoholica,
+    infractorFugado: input.infractorFugado,
+    juzgado: input.juzgado,
     firma: input.firma,
   };
-}
-
-function SelectField({
-  label,
-  placeholder,
-  value,
-  options,
-  onChangeValue,
-  disabled,
-  allowClear,
-}: {
-  label: string;
-  placeholder: string;
-  value: number | null;
-  options: Array<{ value: number; label: string }>;
-  onChangeValue: (value: number | null) => void;
-  disabled?: boolean;
-  allowClear?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const selected = useMemo(() => options.find((o) => o.value === value) ?? null, [options, value]);
-
-  return (
-    <>
-      <View style={{ gap: 6 }}>
-        <Text style={styles.label}>{label}</Text>
-        <Pressable
-          onPress={() => setIsOpen(true)}
-          disabled={disabled}
-          style={[
-            styles.selectBox,
-            disabled ? { opacity: 0.6 } : null,
-          ]}
-        >
-          <Text style={selected ? styles.selectText : styles.selectPlaceholder} numberOfLines={1}>
-            {selected ? selected.label : placeholder}
-          </Text>
-          <Text style={styles.selectChevron}>v</Text>
-        </Pressable>
-      </View>
-
-      <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <Pressable style={{ flex: 1 }} onPress={() => setIsOpen(false)} />
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{label}</Text>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                {allowClear ? (
-                  <AppButton title="Limpiar" icon="close" variant="secondary" size="sm" onPress={() => onChangeValue(null)} />
-                ) : null}
-                <AppButton title="Cerrar" icon="close" variant="ghost" size="sm" onPress={() => setIsOpen(false)} />
-              </View>
-            </View>
-
-            <ScrollView>
-              <View style={{ gap: 8 }}>
-                {options.map((o) => {
-                  const isActive = o.value === value;
-                  return (
-                    <Pressable
-                      key={o.value}
-                      style={[styles.optionRow, isActive ? styles.optionRowActive : null]}
-                      onPress={() => {
-                        onChangeValue(o.value);
-                        setIsOpen(false);
-                      }}
-                    >
-                      <Text style={styles.optionText}>{o.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </>
-  );
 }
 
 function MultiSelectField({
@@ -1719,6 +2035,7 @@ function MultiSelectField({
   onChangeValues: (values: number[]) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const selectedLabels = useMemo(() => {
     const selectedSet = new Set(values);
@@ -1743,7 +2060,7 @@ function MultiSelectField({
       <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
         <View style={styles.modalBackdrop}>
           <Pressable style={{ flex: 1 }} onPress={() => setIsOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1752,7 +2069,7 @@ function MultiSelectField({
               </View>
             </View>
 
-            <ScrollView>
+            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
               <View style={{ gap: 8 }}>
                 {options.map((o) => {
                   const isActive = values.includes(o.value);
@@ -1792,6 +2109,7 @@ function MultiSelectStringField({
   onChangeValues: (values: string[]) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const selectedText = useMemo(() => {
     if (!values.length) return null;
@@ -1814,7 +2132,7 @@ function MultiSelectStringField({
       <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
         <View style={styles.modalBackdrop}>
           <Pressable style={{ flex: 1 }} onPress={() => setIsOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1823,7 +2141,7 @@ function MultiSelectStringField({
               </View>
             </View>
 
-            <ScrollView>
+            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
               <View style={{ gap: 8 }}>
                 {options.map((opt) => {
                   const isActive = values.includes(opt);
@@ -1863,6 +2181,7 @@ function SelectFieldString({
   onChangeValue: (value: string | null) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const insets = useSafeAreaInsets();
   const selected = useMemo(() => options.find((o) => o.value === value) ?? null, [options, value]);
 
   return (
@@ -1880,7 +2199,7 @@ function SelectFieldString({
       <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
         <View style={styles.modalBackdrop}>
           <Pressable style={{ flex: 1 }} onPress={() => setIsOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1888,7 +2207,7 @@ function SelectFieldString({
               </View>
             </View>
 
-            <ScrollView>
+            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
               <View style={{ gap: 8 }}>
                 {options.map((o) => {
                   const isActive = o.value === value;

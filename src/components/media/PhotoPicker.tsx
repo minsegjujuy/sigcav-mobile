@@ -19,7 +19,8 @@ export function PhotoPicker({
   onChange,
   includeBase64 = false,
   quality = 0.8,
-  allowEditing = false,
+  allowEditing = true,
+  aspect = [4, 3],
 }: {
   label: string;
   value: PhotoValue | null;
@@ -27,6 +28,7 @@ export function PhotoPicker({
   includeBase64?: boolean;
   quality?: number;
   allowEditing?: boolean;
+  aspect?: [number, number];
 }) {
   const [isBusy, setIsBusy] = useState(false);
 
@@ -66,6 +68,7 @@ export function PhotoPicker({
         quality,
         base64: includeBase64,
         allowsEditing: allowEditing,
+        aspect: allowEditing ? aspect : undefined,
       });
 
       if (res.canceled) return;
@@ -91,6 +94,7 @@ export function PhotoPicker({
         quality,
         base64: includeBase64,
         allowsEditing: allowEditing,
+        aspect: allowEditing ? aspect : undefined,
       });
 
       if (res.canceled) return;
@@ -100,7 +104,7 @@ export function PhotoPicker({
     } finally {
       setIsBusy(false);
     }
-  }, [allowEditing, handleAsset, includeBase64, quality]);
+  }, [allowEditing, aspect, handleAsset, includeBase64, quality]);
 
   return (
     <View style={styles.container}>

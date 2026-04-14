@@ -14,6 +14,10 @@ export interface ActaRequest {
   vehiculo: VehiculoSolicitud;
   adjunta: string;
   retencion: string;
+  retencionVehiculo: boolean;
+  graduacionAlcoholica: number;
+  infractorFugado: boolean;
+  juzgado?: number;
   ubicacionRequest: UbicacionRequest;
   firma?: FirmaDTO;
 }
@@ -58,6 +62,13 @@ export interface InfractorSolicitud {
   propietario: boolean;
 }
 
+export interface TestigoRequest {
+  nombre: string;
+  apellido: string;
+  dni: string;
+  domicilio?: string;
+}
+
 export interface FirmaDTO {
   /** ID del acta a la que pertenece */
   actaId: number;
@@ -79,9 +90,14 @@ export interface FirmaDTO {
   firmaInfractorBase64: string | null;
 
   /**
+   * Si el infractor se negó a firmar, deben cargarse exactamente 2 testigos.
+   * En caso contrario, puede enviarse como lista vacía.
+   */
+  testigos: TestigoRequest[];
+
+  /**
    * Imagen de la firma del oficial en formato Base64.
    * Es obligatoria para la validez legal del acta.
    */
   firmaOficialBase64: string;
 }
-

@@ -4,7 +4,9 @@ import { login } from '../api/auth';
 
 type AuthContextValue = {
   jwt: string | null;
+  authenticate: (username: string, password: string) => Promise<string>;
   signIn: (username: string, password: string) => Promise<void>;
+  signInWithJwt: (jwt: string) => void;
   signOut: () => void;
 };
 
@@ -14,16 +16,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [jwt, setJwt] = useState<string | null>(null);
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      jwt,
-      signIn: async (username: string, password: string) => {
+    () => {
+      const authenticate = async (username: string, password: string) => {
         const baseUrl = getApiBaseUrl();
         if (!baseUrl) throw new Error(getMissingApiBaseUrlMessage());
         const res = await login(baseUrl, { username, password });
-        setJwt(res.jwt);
-      },
-      signOut: () => setJwt(null),
-    }),
+        return res.jwt;
+      };
+
+      return {
+        jwt,
+        authenticate,
+        signIn: async (username: string, password: string) => {
+          const token = await authenticate(username, password);
+          setJwt(token.trim());
+        },
+        signInWithJwt: (token: string) => setJwt(token.trim()),
+        signOut: () => setJwt(null),
+      };
+    },
     [jwt]
   );
 
@@ -35,4 +46,3 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth debe usarse dentro de AuthProvider');
   return ctx;
 }
-

@@ -60,6 +60,26 @@ export async function obtenerActasPorDia(fi: string, ff: string, token: string |
   return getJson<DiasCantidad[]>(baseUrl, url, { headers });
 }
 
+export async function obtenerZpl(nro: string, token: string | null): Promise<string> {
+  const baseUrl = requireApiBaseUrl();
+  const { headers } = getAuthHeader(token);
+
+  const res = await fetch(`${baseUrl}/acta/${nro}/zpl`, {
+    method: 'GET',
+    headers: {
+      Accept: 'text/plain',
+      ...headers,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error ${res.status}: ${errorText}`);
+  }
+
+  return await res.text();
+}
+
 export async function descargarPdfActa(nro: string, token: string | null): Promise<Blob> {
   const baseUrl = requireApiBaseUrl();
   const { headers } = getAuthHeader(token);

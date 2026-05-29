@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Controller, useFieldArray } from 'react-hook-form';
+import { Controller, useController, useFieldArray } from 'react-hook-form';
 import { SeccionAcompanantesRN } from './SeccionAcompanante.native';
 import { styles } from '../components/ui/styles';
 import { AppButton } from '../components/ui/AppButton';
@@ -38,7 +38,8 @@ const NACIONALIDADES = [
   'PERUANA',
   'VENEZOLANA',
 ];
-const LICENCIA_CLASE = ['MUNICIPAL', 'PROVINCIAL', 'NACIONAL', 'EXTRANJERA'];
+const LICENCIA_TIPO = ['NACIONAL', 'MUNICIPAL', 'PROVINCIAL', 'EXTRANJERA'];
+const LICENCIA_CLASE = ['A', 'A.1', 'B', 'B.1', 'B.2', 'C', 'D', 'D.1', 'D.2', 'E', 'F', 'G'];
 const LICENCIA_ESTADO = ['VIGENTE', 'VENCIDA', 'NO_POSEE', 'SD'];
 const ESTADO_SALUD = ['SIN LESIONES', 'HERIDO LEVE', 'HERIDO GRAVE', 'FALLECIDO'];
 
@@ -120,6 +121,7 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch }) => {
               conductorFechaNacimiento: '',
               licenciaNro: '',
               municipio: '',
+              licenciaTipo: '',
               licenciaClase: '',
               licenciaEstado: 'SD',
               esFuerzaSeguridad: false,
@@ -140,7 +142,7 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch }) => {
 
       {fields.map((field, index) => {
         const esFuerza = watch(`protagonistas.${index}.esFuerzaSeguridad`);
-        const licenciaClase = watch(`protagonistas.${index}.licenciaClase`);
+        const licenciaTipo = watch(`protagonistas.${index}.licenciaTipo`);
 
         return (
           <View key={field.id} style={styles.section}>
@@ -182,16 +184,17 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch }) => {
             <ControlledInput control={control} name={`protagonistas.${index}.conductorEdad`} label="Edad" keyboardType="numeric" />
             <ControlledPicker control={control} name={`protagonistas.${index}.conductorNacionalidad`} label="Nacionalidad" items={NACIONALIDADES} />
 
-            <ControlledPicker control={control} name={`protagonistas.${index}.licenciaClase`} label="Tipo de licencia" items={LICENCIA_CLASE} />
+            <ControlledPicker control={control} name={`protagonistas.${index}.licenciaTipo`} label="Tipo de licencia" items={LICENCIA_TIPO} />
+            <ControlledPicker control={control} name={`protagonistas.${index}.licenciaClase`} label="Clase de licencia" items={LICENCIA_CLASE} />
             <ControlledInput control={control} name={`protagonistas.${index}.licenciaNro`} label="Licencia Nro" />
 
-            {licenciaClase === 'MUNICIPAL' && (
+            {licenciaTipo === 'MUNICIPAL' && (
               <ControlledInput control={control} name={`protagonistas.${index}.municipio`} label="Municipio" />
             )}
 
             <ControlledPicker control={control} name={`protagonistas.${index}.licenciaEstado`} label="Estado Licencia" items={LICENCIA_ESTADO} />
             <ControlledInput control={control} name={`protagonistas.${index}.trasladoConductor`} label="Traslado (Hospital/SAME)" multiline />
-            <ControlledInput control={control} name={`protagonistas.${index}.graduacionAlcoholica`} label="Graduación alcohólica (g/L)" keyboardType="numeric" />
+            <ControlledDecimalInput control={control} name={`protagonistas.${index}.graduacionAlcoholica`} label="Graduación alcohólica (g/L)" placeholder="0.00" />
             <ControlledPicker control={control} name={`protagonistas.${index}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
 
             <BooleanField control={control} name={`protagonistas.${index}.esFuerzaSeguridad`} label="¿Es fuerza de seguridad?" />
@@ -239,7 +242,7 @@ const ControlledInput = ({
   control: any;
   name: string;
   label: string;
-  keyboardType?: 'default' | 'numeric';
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad';
   placeholder?: string;
   multiline?: boolean;
 }) => (
@@ -253,10 +256,6 @@ const ControlledInput = ({
           style={[styles.input, multiline && styles.textArea]}
           value={field.value == null ? '' : String(field.value)}
           onChangeText={(text) => {
-            if (name.includes('graduacionAlcoholica')) {
-              field.onChange(text === '' ? null : Number(text));
-              return;
-            }
             field.onChange(text);
           }}
           keyboardType={keyboardType}
@@ -268,6 +267,58 @@ const ControlledInput = ({
     )}
   />
 );
+
+const ControlledDecimalInput = ({
+  control,
+  name,
+  label,
+  placeholder,
+}: {
+  control: any;
+  name: string;
+  label: string;
+  placeholder?: string;
+}) => {
+  const [text, setText] = useState('');
+  const { field } = useController({ control, name });
+
+  const sanitize = (raw: string) => {
+    const normalized = raw.replace(',', '.');
+    const cleaned = normalized.replace(/[^0-9.]/g, '');
+    const parts = cleaned.split('.');
+    if (parts.length <= 1) return cleaned;
+    return `${parts[0]}.${parts.slice(1).join('')}`;
+  };
+
+  useEffect(() => {
+    const external = field.value == null ? '' : String(field.value);
+    setText(external);
+  }, [field.value]);
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={text}
+        keyboardType="decimal-pad"
+        placeholder={placeholder}
+        onChangeText={(raw) => {
+          setText(sanitize(raw));
+        }}
+        onBlur={() => {
+          const normalized = sanitize(text);
+          if (!normalized || normalized === '.') {
+            field.onChange(null);
+            return;
+          }
+          const parsed = Number.parseFloat(normalized);
+          field.onChange(Number.isFinite(parsed) ? parsed : null);
+        }}
+      />
+    </View>
+  );
+};
 
 const ControlledPicker = ({
   control,

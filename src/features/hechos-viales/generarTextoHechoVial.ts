@@ -11,7 +11,7 @@ DESTACAMENTO: ${hecho.puesto}
 INFORME DE HECHO VIAL
 
 FECHA Y HORA: ${hecho.fecha}
-RUTA / UBICACIÓN: ${hecho.ruta}
+RUTA / UBICACIÓN: ${hecho.ubicacionReq?.descripcion ?? ''}
 COORDENADAS: ${hecho.ubicacionReq.lat} , ${hecho.ubicacionReq.lng}
 UNIDAD REGIONAL: ${hecho.ubicacionReq.unidadRegional}
 DEPARTAMENTO: ${hecho.ubicacionReq.departamento}

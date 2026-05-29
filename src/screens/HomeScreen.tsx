@@ -10,6 +10,7 @@ import type { ActaRequest } from '../features/actas/types';
 import { HechoVialFormRN } from './HechosVialesScreen';
 import HechosVialesScreen from './HechosVialesList';
 import PrinterSelector from '../components/modules/PrinterSelector';
+import TwoFactorSetupScreen from './TwoFactorSetupScreen';
 
 type NavbarGroupKey = 'actas' | 'hechos_viales' | 'configuracion';
 
@@ -42,7 +43,7 @@ export function HomeScreen() {
     nextTab === 'nuevo_hecho_vial'
   ) {
     setActiveGroup('hechos_viales');
-  } else if (nextTab === 'configuracion') {
+  } else if (nextTab === 'configuracion' || nextTab === '2FA') {
     setActiveGroup('configuracion');
   }
 };
@@ -91,6 +92,9 @@ export function HomeScreen() {
 
       case 'configuracion':
         return <PrinterSelector />;
+
+        case '2FA':
+        return <TwoFactorSetupScreen />;
 
       default:
         return null;

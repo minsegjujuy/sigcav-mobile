@@ -8,7 +8,8 @@ export type NavbarTabKey =
   | 'nueva_acta'
   | 'mis_hechos_viales'
   | 'nuevo_hecho_vial'
-  | 'configuracion';
+  | 'configuracion'
+  | '2FA';
 
 type NavbarGroupKey = 'actas' | 'hechos_viales' | 'configuracion';
 
@@ -76,14 +77,22 @@ export function Navbar({
               onPress={() => onChangeTab('nuevo_hecho_vial')}
             />
           </>
-        ) : (
+        ) : activeGroup === 'configuracion' ? (
+          <>
           <TabButton
-            label="CONFIGURACIÓN"
+            label="AJUSTES"
             icon="settings"
             isActive={activeTab === 'configuracion'}
             onPress={() => onChangeTab('configuracion')}
           />
-        )}
+          <TabButton
+            label="2FA"
+            icon="qr-code"
+            isActive={activeTab === '2FA'}
+            onPress={() => onChangeTab('2FA')}
+          />
+          </>
+        ) : <></>}
       </View>
 
       <Pressable onPress={handleNextGroup} style={styles.arrowButton}>

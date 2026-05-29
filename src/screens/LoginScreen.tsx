@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,16 +17,22 @@ import { useBiometricAuth } from '../auth/useBiometricAuth';
 import { saveJwt } from '../auth/secureJwtStorage';
 import { decodeJwtPayload } from '../auth/jwt';
 import { isHttpDebugEnabled } from '../api/httpDebug';
+import { verify as verify2fa } from '../services/AuthService';
 
 export function LoginScreen() {
   const { authenticate, signInWithJwt } = useAuth();
   const { handleBiometricLogin, handleEnrollment } = useBiometricAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [twoFactorDigits, setTwoFactorDigits] = useState<string[]>(() => ['', '', '', '', '', '']);
+  const [twoFactorMessage, setTwoFactorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBioSubmitting, setIsBioSubmitting] = useState(false);
+  const [isTwoFactorSubmitting, setIsTwoFactorSubmitting] = useState(false);
   //const [error, setError] = useState<string | null>(null);
   const [bioEnabled, setBioEnabled] = useState(false);
+  const otpRefs = useRef<Array<TextInput | null>>([]);
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +64,15 @@ export function LoginScreen() {
     setIsSubmitting(true);
     try {
       const normalizedUsername = username.trim();
-      const jwt = await authenticate(normalizedUsername, password);
+      const res = await authenticate(normalizedUsername, password);
+      const jwt = (res as any)?.jwt as string | null | undefined;
+
+      if (!jwt) {
+        setChallengeId((res as any)?.challengeId ? String((res as any).challengeId) : null);
+        setTwoFactorMessage((res as any)?.message ? String((res as any).message) : null);
+        setTwoFactorDigits(['', '', '', '', '', '']);
+        return;
+      }
 
       if (isHttpDebugEnabled()) {
         // eslint-disable-next-line no-console
@@ -106,6 +120,77 @@ export function LoginScreen() {
     }
   }
 
+  const awaitingTwoFactor = !!(challengeId ?? '').trim();
+
+  const twoFactorCode = useMemo(() => twoFactorDigits.join(''), [twoFactorDigits]);
+
+  useEffect(() => {
+    if (!awaitingTwoFactor) return;
+    const t = setTimeout(() => {
+      otpRefs.current[0]?.focus?.();
+    }, 150);
+    return () => clearTimeout(t);
+  }, [awaitingTwoFactor]);
+
+  async function onVerifyTwoFactor() {
+    const cid = (challengeId ?? '').trim();
+    const code = (twoFactorCode ?? '').replace(/\D/g, '').slice(0, 6);
+
+    if (!cid) return;
+    if (code.length !== 6) return;
+
+    setIsTwoFactorSubmitting(true);
+    try {
+      const res = await verify2fa({ challengeId: cid, code });
+      const jwt = (res as any)?.jwt as string | null | undefined;
+      if (!jwt) {
+        setTwoFactorMessage((res as any)?.message ? String((res as any).message) : 'Código inválido.');
+        return;
+      }
+
+      if (isHttpDebugEnabled()) {
+        // eslint-disable-next-line no-console
+        console.log('[AUTH] 2fa jwt payload', decodeJwtPayload(jwt));
+      }
+
+      setChallengeId(null);
+      setTwoFactorMessage(null);
+      setTwoFactorDigits(['', '', '', '', '', '']);
+
+      const normalizedUsername = username.trim();
+
+      Alert.alert(
+        'Ingreso OK',
+        'Queres activar el ingreso con huella/cara para el login diario?',
+        [
+          {
+            text: 'Ahora no',
+            style: 'cancel',
+            onPress: () => {
+              void (async () => {
+                await saveJwt(jwt);
+                signInWithJwt(jwt);
+              })();
+            },
+          },
+          {
+            text: 'Activar',
+            onPress: () => {
+              void (async () => {
+                await handleEnrollment(normalizedUsername, jwt);
+                setBioEnabled(true);
+                await saveJwt(jwt);
+                signInWithJwt(jwt);
+              })();
+            },
+          },
+        ]
+      );
+    } finally {
+      setIsTwoFactorSubmitting(false);
+    }
+  }
+
   async function onBiometricPress() {
     //setError(null);
     setIsBioSubmitting(true);
@@ -117,7 +202,19 @@ export function LoginScreen() {
   }
 
   const canSubmit =
-    username.trim().length > 0 && password.length > 0 && !isSubmitting && !isBioSubmitting;
+    !awaitingTwoFactor &&
+    username.trim().length > 0 &&
+    password.length > 0 &&
+    !isSubmitting &&
+    !isBioSubmitting &&
+    !isTwoFactorSubmitting;
+
+  const canVerifyTwoFactor =
+    awaitingTwoFactor &&
+    (twoFactorCode ?? '').replace(/\D/g, '').length === 6 &&
+    !isSubmitting &&
+    !isBioSubmitting &&
+    !isTwoFactorSubmitting;
 
   return (
     <KeyboardAvoidingView
@@ -128,7 +225,9 @@ export function LoginScreen() {
         <Text style={styles.title}>Ingresar</Text>
         <Text style={styles.subtitle}>Accedé con tu usuario y contraseña</Text>
 
-        <Text style={styles.label}>Username</Text>
+        {!awaitingTwoFactor ? (
+          <>
+            <Text style={styles.label}>Username</Text>
         <TextInput
           value={username}
           onChangeText={setUsername}
@@ -155,25 +254,127 @@ export function LoginScreen() {
           returnKeyType="done"
           onSubmitEditing={onSubmit}
         />
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Código de verificación (6 dí­gitos)</Text>
+            <View style={styles.otpRow}>
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <TextInput
+                  key={idx}
+                  ref={(r) => {
+                    otpRefs.current[idx] = r;
+                  }}
+                  value={twoFactorDigits[idx] ?? ''}
+                  onChangeText={(t) => {
+                    const digits = (t ?? '').replace(/\D/g, '');
+
+                    // Paste de cÃ³digo completo
+                    if (digits.length > 1) {
+                      const padded = digits.slice(0, 6).padEnd(6, ' ');
+                      const next = padded.split('').map((c) => (c === ' ' ? '' : c));
+                      setTwoFactorDigits(next);
+                      if (digits.slice(0, 6).length === 6) {
+                        otpRefs.current[5]?.focus?.();
+                      } else {
+                        otpRefs.current[Math.min(digits.length, 5)]?.focus?.();
+                      }
+                      return;
+                    }
+
+                    const nextDigit = digits.slice(0, 1);
+                    setTwoFactorDigits((prev) => {
+                      const next = [...prev];
+                      next[idx] = nextDigit;
+                      return next;
+                    });
+
+                    if (nextDigit && idx < 5) {
+                      otpRefs.current[idx + 1]?.focus?.();
+                    }
+                  }}
+                  onKeyPress={(e) => {
+                    if (e.nativeEvent.key !== 'Backspace') return;
+                    const current = twoFactorDigits[idx] ?? '';
+                    if (current) {
+                      setTwoFactorDigits((prev) => {
+                        const next = [...prev];
+                        next[idx] = '';
+                        return next;
+                      });
+                      return;
+                    }
+                    if (idx > 0) {
+                      otpRefs.current[idx - 1]?.focus?.();
+                      setTwoFactorDigits((prev) => {
+                        const next = [...prev];
+                        next[idx - 1] = '';
+                        return next;
+                      });
+                    }
+                  }}
+                  keyboardType="numeric"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType={idx === 0 ? 'oneTimeCode' : 'none'}
+                  maxLength={1}
+                  editable={!isTwoFactorSubmitting}
+                  style={styles.otpInput}
+                  returnKeyType={idx === 5 ? 'done' : 'next'}
+                  onSubmitEditing={() => {
+                    if (idx < 5) otpRefs.current[idx + 1]?.focus?.();
+                    else onVerifyTwoFactor();
+                  }}
+                />
+              ))}
+            </View>
+            {twoFactorMessage ? <Text style={styles.subtitle}>{twoFactorMessage}</Text> : null}
+          </>
+        )}
 
         <View style={styles.actions}>
-          <AppButton
-            title="Ingresar"
-            icon="lock-open"
-            onPress={onSubmit}
-            disabled={!canSubmit}
-            loading={isSubmitting}
-          />
-          {bioEnabled ? (
-            <AppButton
-              title="Ingresar con huella"
-              icon="fingerprint"
-              variant="secondary"
-              onPress={onBiometricPress}
-              disabled={isSubmitting || isBioSubmitting}
-              loading={isBioSubmitting}
-            />
-          ) : null}
+          {!awaitingTwoFactor ? (
+            <>
+              <AppButton
+                title="Ingresar"
+                icon="lock-open"
+                onPress={onSubmit}
+                disabled={!canSubmit}
+                loading={isSubmitting}
+              />
+              {bioEnabled ? (
+                <AppButton
+                  title="Ingresar con huella"
+                  icon="fingerprint"
+                  variant="secondary"
+                  onPress={onBiometricPress}
+                  disabled={isSubmitting || isBioSubmitting}
+                  loading={isBioSubmitting}
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <AppButton
+                title="Verificar"
+                icon="check"
+                onPress={onVerifyTwoFactor}
+                disabled={!canVerifyTwoFactor}
+                loading={isTwoFactorSubmitting}
+              />
+              <AppButton
+                title="Volver"
+                icon="arrow-back"
+                variant="ghost"
+                onPress={() => {
+                  setChallengeId(null);
+                  setTwoFactorDigits(['', '', '', '', '', '']);
+                  setTwoFactorMessage(null);
+                }}
+                disabled={isTwoFactorSubmitting}
+              />
+            </>
+          )}
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -215,4 +416,17 @@ const styles = StyleSheet.create({
   },
   error: { color: Colors.danger, fontWeight: '800' },
   actions: { gap: 10, marginTop: 6 },
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  otpInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 14,
+    paddingVertical: 12,
+    fontSize: 18,
+    fontWeight: '900',
+    backgroundColor: Colors.white,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
 });

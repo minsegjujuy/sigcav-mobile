@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -151,6 +154,7 @@ const defaultValues: HechoVialForm = {
   grupo: 0,
   fecha: '',
   hora: '',
+  comisaria: '',
   ubicacionReq: defaultUbicacion,
   victimaFatal: 'NO',
   danosMateriales: 'SI',
@@ -186,6 +190,36 @@ export const HechoVialFormRN: React.FC<Props> = ({
   limpiarHechoVial,
 }) => {
   const { jwt } = useAuth();
+  const [formValidationErrors, setFormValidationErrors] = useState<string[]>([]);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const errorPulse = useRef(new Animated.Value(0)).current;
+
+  const scrollToTop = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  useEffect(() => {
+    if (formValidationErrors.length === 0) return;
+
+    errorPulse.setValue(0);
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(errorPulse, { toValue: 1, duration: 520, useNativeDriver: true }),
+        Animated.timing(errorPulse, { toValue: 0, duration: 520, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    const stopTimer = setTimeout(() => {
+      anim.stop();
+      errorPulse.setValue(0);
+    }, 8000);
+
+    return () => {
+      clearTimeout(stopTimer);
+      anim.stop();
+      errorPulse.setValue(0);
+    };
+  }, [errorPulse, formValidationErrors.length]);
 
   const {
     control,
@@ -419,6 +453,13 @@ export const HechoVialFormRN: React.FC<Props> = ({
         ...data,
         ubicacionReq,
       };
+      const validation = validateHechoVialForm(payload);
+      if (validation.length > 0) {
+        setFormValidationErrors(validation);
+        scrollToTop();
+        return;
+      }
+      setFormValidationErrors([]);
       console.log('HECHO VIAL PAYLOAD: ', payload)
       await guardarHechoVialApi(payload, jwt);
       Alert.alert('Éxito', 'Se guardó correctamente el hecho vial');
@@ -437,8 +478,32 @@ export const HechoVialFormRN: React.FC<Props> = ({
   };
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 40 }]}>
-      <Text style={styles.title}>Informe de Hecho Vial</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+    >
+      <ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.container, { paddingBottom: 140 }]}
+      >
+        <Text style={styles.title}>Informe de Hecho Vial</Text>
+        {formValidationErrors.length > 0 ? (
+          <Animated.View
+            style={{
+              gap: 4,
+              opacity: errorPulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+              transform: [{ scale: errorPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) }],
+            }}
+          >
+            {formValidationErrors.map((msg, idx) => (
+              <Text key={`${idx}-${msg}`} style={styles.errorText}>
+                {msg}
+              </Text>
+            ))}
+          </Animated.View>
+        ) : null}
 
       <SectionTitle title="Datos de Identificación" />
 
@@ -482,6 +547,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
         )}
       />
       <ControlledInput control={control} name="hora" label="Hora" placeholder="HH:MM:SS" />
+      <ControlledInput control={control} name="comisaria" label="Comisaría" placeholder="Ej. Seccional 3" />
 
       <UbicacionSection
         ubicLat={ubicLat}
@@ -707,48 +773,12 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <SectionTitle title="Personal interviniente por unidades" />
 
       {unidadesFields.map((field, index) => (
-        <Card key={field.id}>
-          <ControlledInput control={control} name={`unidades.${index}.unidad`} label="Unidad" />
-
-          <AppButton
-            title="Eliminar unidad"
-            icon="delete"
-            variant="secondary"
-            size="sm"
-            onPress={() => removeUnidad(index)}
-          />
-
-          <Text style={styles.subTitle}>Personal</Text>
-
-          <Controller
-            control={control}
-            name={`unidades.${index}.personal.0.nombre`}
-            render={({ field }) => (
-              <Input label="Nombre" value={field.value ?? ''} onChangeText={field.onChange} />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name={`unidades.${index}.personal.0.jerarquia`}
-            render={({ field }) => (
-              <Input label="Jerarquía" value={field.value ?? ''} onChangeText={field.onChange} />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name={`unidades.${index}.personal.0.observacion`}
-            render={({ field }) => (
-              <Input
-                label="Observación"
-                multiline
-                value={field.value ?? ''}
-                onChangeText={field.onChange}
-              />
-            )}
-          />
-        </Card>
+        <UnidadIntervinienteCard
+          key={field.id}
+          control={control}
+          index={index}
+          onRemoveUnidad={() => removeUnidad(index)}
+        />
       ))}
 
       <AppButton
@@ -772,8 +802,9 @@ export const HechoVialFormRN: React.FC<Props> = ({
 
       <SeccionProtagonistasRN control={control} watch={watch} />
 
-      <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit)} />
-    </ScrollView>
+        <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit)} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -790,6 +821,79 @@ const Label = ({ children }: { children: React.ReactNode }) => (
 const Card = ({ children }: { children: React.ReactNode }) => (
   <View style={styles.section}>{children}</View>
 );
+
+const UnidadIntervinienteCard = ({
+  control,
+  index,
+  onRemoveUnidad,
+}: {
+  control: any;
+  index: number;
+  onRemoveUnidad: () => void;
+}) => {
+  const {
+    fields: personalFields,
+    append: appendPersonal,
+    remove: removePersonal,
+  } = useFieldArray({
+    control,
+    name: `unidades.${index}.personal`,
+  });
+
+  return (
+    <Card>
+      <ControlledInput control={control} name={`unidades.${index}.unidad`} label="Unidad" />
+
+      <AppButton title="Eliminar unidad" icon="delete" variant="secondary" size="sm" onPress={onRemoveUnidad} />
+
+      <Text style={styles.subTitle}>Personal</Text>
+
+      {personalFields.map((p, pIndex) => (
+        <View key={p.id} style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <Text style={styles.label}>Personal #{pIndex + 1}</Text>
+            {personalFields.length > 1 ? (
+              <AppButton
+                title="Quitar"
+                icon="delete"
+                variant="secondary"
+                size="sm"
+                onPress={() => removePersonal(pIndex)}
+              />
+            ) : null}
+          </View>
+
+          <Controller
+            control={control}
+            name={`unidades.${index}.personal.${pIndex}.nombre`}
+            render={({ field }) => <Input label="Nombre" value={field.value ?? ''} onChangeText={field.onChange} />}
+          />
+
+          <Controller
+            control={control}
+            name={`unidades.${index}.personal.${pIndex}.jerarquia`}
+            render={({ field }) => <Input label="Jerarquía" value={field.value ?? ''} onChangeText={field.onChange} />}
+          />
+
+          <Controller
+            control={control}
+            name={`unidades.${index}.personal.${pIndex}.observacion`}
+            render={({ field }) => (
+              <Input label="Observación" multiline value={field.value ?? ''} onChangeText={field.onChange} />
+            )}
+          />
+        </View>
+      ))}
+
+      <AppButton
+        title="Agregar personal"
+        icon="add"
+        size="sm"
+        onPress={() => appendPersonal({ nombre: '', jerarquia: '', observacion: '' })}
+      />
+    </Card>
+  );
+};
 
 const Input = ({
   label,
@@ -830,6 +934,58 @@ function formatTimeHhMmSs(input: string): string {
   if (digits.length > 2) out = `${hh}:${mm}`;
   if (digits.length > 4) out = `${hh}:${mm}:${ss}`;
   return out;
+}
+
+function validateHechoVialForm(input: HechoVialForm): string[] {
+  const errors: string[] = [];
+
+  const isBlank = (v: unknown) => (v == null ? true : String(v).trim().length === 0);
+
+  if (!(Number.isFinite(input.destacamento) && input.destacamento > 0)) {
+    errors.push('El destacamento es obligatorio');
+  }
+  if (!(Number.isFinite(input.grupo) && input.grupo > 0)) {
+    errors.push('El grupo es obligatorio');
+  }
+  if (isBlank(input.fecha)) errors.push('La fecha es obligatoria');
+  if (isBlank(input.hora)) errors.push('La hora es obligatoria');
+
+  if (!input.ubicacionReq) {
+    errors.push('La ubicación es obligatoria');
+  }
+
+  if (isBlank(input.victimaFatal)) errors.push('Debe indicar si hubo víctima fatal');
+  else if (!/^(SI|NO)$/.test(String(input.victimaFatal).trim())) {
+    errors.push('Víctima fatal solo puede ser SI o NO');
+  }
+
+  if (isBlank(input.danosMateriales)) errors.push('Debe indicar si hubo daños materiales');
+  else if (!/^(SI|NO)$/.test(String(input.danosMateriales).trim())) {
+    errors.push('Daños materiales solo puede ser SI o NO');
+  }
+
+  if (isBlank(input.zona)) errors.push('La zona es obligatoria');
+  if (isBlank(input.tipoVia)) errors.push('El tipo de vía es obligatorio');
+  if (!Array.isArray(input.involucrados) || input.involucrados.length === 0) {
+    errors.push('Debe cargar al menos un involucrado');
+  }
+  if (isBlank(input.configuracionVia)) errors.push('La configuración de vía es obligatoria');
+  if (isBlank(input.estadoCalzada)) errors.push('El estado de la calzada es obligatorio');
+  if (isBlank(input.materialCalzada)) errors.push('El material de la calzada es obligatorio');
+  if (isBlank(input.estadoFisicoCalzada)) errors.push('El estado físico de la calzada es obligatorio');
+  if (isBlank(input.estadoAmbiental)) errors.push('El estado ambiental es obligatorio');
+  if (isBlank(input.luzArtificial)) errors.push('Debe indicar si hay luz artificial');
+  if (isBlank(input.semaforo)) errors.push('Debe indicar si hay semáforo');
+  if (isBlank(input.tipoSiniestro)) errors.push('El tipo de siniestro es obligatorio');
+  if (!Array.isArray(input.posiblesCausas) || input.posiblesCausas.length === 0) {
+    errors.push('Debe cargar al menos una posible causa');
+  }
+  if (isBlank(input.sintesis)) errors.push('La síntesis es obligatoria');
+  if (!Array.isArray(input.protagonistas) || input.protagonistas.length === 0) {
+    errors.push('Debe cargar al menos un protagonista');
+  }
+
+  return Array.from(new Set(errors));
 }
 
 const ControlledInput = ({

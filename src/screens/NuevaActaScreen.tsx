@@ -70,6 +70,7 @@ export function NuevaActaScreen({
   const [juzgados, setJuzgados] = useState<Juzgado[]>([]);
   const [articulosByLey, setArticulosByLey] = useState<Articulo[]>([]);
   const [articulosById, setArticulosById] = useState<Record<number, Articulo>>({});
+  const [articuloLeyById, setArticuloLeyById] = useState<Record<number, number>>({});
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(false);
   const [catalogsError, setCatalogsError] = useState<string | null>(null);
   const [isLoadingArticulos, setIsLoadingArticulos] = useState(false);
@@ -294,6 +295,11 @@ export function NuevaActaScreen({
         setArticulosById((prev) => {
           const next = { ...prev };
           for (const a of data) next[a.idArt] = a;
+          return next;
+        });
+        setArticuloLeyById((prev) => {
+          const next = { ...prev };
+          for (const a of data) next[a.idArt] = idLey;
           return next;
         });
       } catch (e) {
@@ -1055,14 +1061,52 @@ export function NuevaActaScreen({
     [juzgados]
   );
   const articulosOptions = useMemo(() => {
-    const list = Object.values(articulosById);
+    if (!idLey) return [];
+    const base = articulosByLey;
+    const selectedExtra = articulosSeleccionados
+      .map((id) => articulosById[id])
+      .filter((a): a is Articulo => Boolean(a));
+
+    const byId = new Map<number, Articulo>();
+    for (const a of base) byId.set(a.idArt, a);
+    for (const a of selectedExtra) {
+      const leyForArticulo = articuloLeyById[a.idArt];
+      if (leyForArticulo === idLey) byId.set(a.idArt, a);
+    }
+
+    const list = Array.from(byId.values());
     list.sort((a, b) => {
       const an = (a.nro ?? '').localeCompare(b.nro ?? '');
       if (an !== 0) return an;
       return (a.detalle ?? '').localeCompare(b.detalle ?? '');
     });
     return list;
-  }, [articulosById]);
+  }, [articuloLeyById, articulosById, articulosByLey, articulosSeleccionados, idLey]);
+
+  const articulosSeleccionadosForLey = useMemo(() => {
+    if (!idLey) return [];
+    return articulosSeleccionados.filter((id) => articuloLeyById[id] === idLey);
+  }, [articuloLeyById, articulosSeleccionados, idLey]);
+
+  const handleArticulosChangeForLey = (nextForLey: number[]) => {
+    if (!idLey) return;
+    const prevForLeySet = new Set(articulosSeleccionadosForLey);
+    const nextForLeySet = new Set(nextForLey);
+
+    setArticulosSeleccionados((prev) => {
+      const keepOther = prev.filter((id) => articuloLeyById[id] !== idLey);
+      return [...keepOther, ...Array.from(nextForLeySet)];
+    });
+
+    setArticuloLeyById((prev) => {
+      const next = { ...prev };
+      for (const id of nextForLeySet) next[id] = idLey;
+      for (const id of prevForLeySet) {
+        if (!nextForLeySet.has(id) && next[id] === idLey) delete next[id];
+      }
+      return next;
+    });
+  };
   const motivoOptions = useMemo(
     () =>
       [
@@ -1222,9 +1266,9 @@ export function NuevaActaScreen({
             <MultiSelectPicker
               label="Articulos"
               placeholder="Seleccionar arti­culos"
-              values={articulosSeleccionados}
+              values={articulosSeleccionadosForLey}
               options={articulosOptions.map((a) => ({ value: a.idArt, label: `${a.nro}: ${a.detalle}` }))}
-              onChangeValues={setArticulosSeleccionados}
+              onChangeValues={handleArticulosChangeForLey}
             />
           ) : null}
 

@@ -74,6 +74,7 @@ export function actaResumenToActaRequest(acta: ActaResumenDto): ActaRequest {
     graduacionAlcoholica: 0,
     infractorFugado: acta.infractorFugado,
     juzgado: acta?.juzgado,
+    testigos: [],
     ubicacionRequest: {
       departamento: acta.ubicacionResponse.departamento,
       lat: acta.ubicacionResponse.lat,

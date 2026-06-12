@@ -6,7 +6,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://seguridadvial-jujuy.online"
+        "EXPO_PUBLIC_API_URL": "x"
       }
     },
     "production": {
@@ -15,7 +15,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://seguridadvial-jujuy.online"
+        "EXPO_PUBLIC_API_URL": "x"
       }
     }
   }

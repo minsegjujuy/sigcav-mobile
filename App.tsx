@@ -9,6 +9,9 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { Colors } from './src/theme/colors';
 import { NavigationContainer } from '@react-navigation/native';
 import { HechoVialProvider } from './src/features/hechos-viales/HechoVialContext';
+import { installAuthRefreshInterceptor } from './src/auth/installAuthRefreshInterceptor';
+
+installAuthRefreshInterceptor();
 
 function Root() {
   const { jwt } = useAuth();

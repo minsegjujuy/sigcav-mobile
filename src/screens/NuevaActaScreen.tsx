@@ -29,7 +29,7 @@ import { MultiSelectPicker } from '../components/forms/MultiSelectPicker';
 import { findInfractorByDni } from '../services/InfractorService';
 import { HttpError } from '../api/http';
 import type { Vehiculo as VehiculoBackend } from '../features/infractores/types';
-import { SignaturePadSkia } from '../components/signature/SignaturePadSkia';
+// import { SignaturePadSkia } from '../components/signature/SignaturePadSkia';
 import { PhotoPicker, type PhotoValue } from '../components/media/PhotoPicker';
 import { OcrService } from '../services/OcrService';
 import { actualizarActa, crearActa } from '../services/ActaService';
@@ -141,9 +141,11 @@ export function NuevaActaScreen({
   const skipClearArticulosOnLeyChangeRef = useRef(false);
   const pendingInferLeyArticulosRef = useRef<number[] | null>(null);
 
+  /*
   const [firmaSeNegoAFirmar, setFirmaSeNegoAFirmar] = useState(false);
   const [firmaInfractorBase64, setFirmaInfractorBase64] = useState<string | null>(null);
   const [firmaOficialBase64, setFirmaOficialBase64] = useState('');
+  */
   const [firmaTestigos, setFirmaTestigos] = useState<[TestigoRequest, TestigoRequest]>(() => [
     { nombre: '', apellido: '', dni: '', domicilio: '' },
     { nombre: '', apellido: '', dni: '', domicilio: '' },
@@ -580,7 +582,7 @@ export function NuevaActaScreen({
       setSaveActaMessage('Falta completar fecha.');
       return;
     }
-    if (firmaSeNegoAFirmar) {
+    if (infractorFugado) {
       const normalized = firmaTestigos.map((t) => ({
         nombre: (t.nombre ?? '').trim(),
         apellido: (t.apellido ?? '').trim(),
@@ -592,7 +594,7 @@ export function NuevaActaScreen({
       if (!isValid) {
         setTab('firma');
         setSaveActaMessage(
-          'Si el infractor se negó a firmar, debe cargar exactamente 2 testigos (nombre, apellido y DNI).'
+          'Si el infractor está fugado, debe cargar exactamente 2 testigos (nombre, apellido y DNI).'
         );
         return;
       }
@@ -821,6 +823,20 @@ export function NuevaActaScreen({
     setVehiculoModelo('');
   }
 
+  const testigosActa = useMemo(
+    () =>
+      (infractorFugado
+        ? firmaTestigos.map((t) => ({
+            nombre: (t.nombre ?? '').trim(),
+            apellido: (t.apellido ?? '').trim(),
+            dni: (t.dni ?? '').trim(),
+            domicilio: (t.domicilio ?? '').trim() || undefined,
+          }))
+        : []) as ActaRequest['testigos'],
+    [firmaTestigos, infractorFugado]
+  );
+
+  /*
   const firmaDto = useMemo<ActaRequest['firma']>(() => {
     const oficial = firmaOficialBase64.trim();
     if (!oficial) return undefined;
@@ -859,6 +875,7 @@ export function NuevaActaScreen({
     ubicLat,
     ubicLng,
   ]);
+  */
 
   const requiresGraduacionAlcoholica = useMemo(() => {
     for (const id of articulosSeleccionados) {
@@ -932,6 +949,15 @@ export function NuevaActaScreen({
   setRetencionVehiculo(false);
   setGraduacionAlcoholica('');
   setInfractorFugado(false);
+  setFirmaTestigos([
+    { nombre: '', apellido: '', dni: '', domicilio: '' },
+    { nombre: '', apellido: '', dni: '', domicilio: '' },
+  ]);
+  /*
+  setFirmaSeNegoAFirmar(false);
+  setFirmaInfractorBase64(null);
+  setFirmaOficialBase64('');
+  */
   setJuzgadoId(0);
   //setFirmaDto('');
 };
@@ -983,7 +1009,7 @@ export function NuevaActaScreen({
       graduacionAlcoholica: graduacionAlcoholicaValue,
       infractorFugado,
       juzgado: juzgadoId ?? 0,
-      firma: firmaDto,
+      testigos: testigosActa,
     });
   }, [
     idActa,
@@ -1031,7 +1057,7 @@ export function NuevaActaScreen({
     graduacionAlcoholicaValue,
     infractorFugado,
     juzgadoId,
-    firmaDto,
+    testigosActa,
   ]);
 
   const isEditing = useMemo(() => !!(actaDraft as any)?.idActa, [actaDraft]);
@@ -1151,7 +1177,7 @@ export function NuevaActaScreen({
       >
       <Text style={styles.title}>NUEVA ACTA</Text>
 
-      <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={isEditing} />
+      <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={isEditing || !infractorFugado} />
 
       <View style={{ gap: 8 }}>
         <AppButton
@@ -1167,6 +1193,12 @@ export function NuevaActaScreen({
           </Text>
         ) : null}
       </View>
+
+      {infractorFugado ? (
+        <Text style={styles.helperText}>
+          Infractor fugado activo: en la pestaña de firma solo se cargarán los dos testigos.
+        </Text>
+      ) : null}
 
       {tab === 'acta' ? (
         <Section title="Datos del acta">
@@ -1577,6 +1609,61 @@ export function NuevaActaScreen({
 
       {tab === 'firma' ? (
         <Section title="Firma">
+          {infractorFugado ? (
+            <View style={{ gap: 12 }}>
+              <Text style={styles.sectionTitle}>Testigo 1</Text>
+              <Field
+                label="nombre"
+                value={firmaTestigos[0].nombre ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { nombre: v })}
+              />
+              <Field
+                label="apellido"
+                value={firmaTestigos[0].apellido ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { apellido: v })}
+              />
+              <Field
+                label="dni"
+                value={firmaTestigos[0].dni ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { dni: v })}
+                keyboardType="numeric"
+              />
+              <Field
+                label="domicilio"
+                value={firmaTestigos[0].domicilio ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(0, { domicilio: v })}
+              />
+
+              <Text style={styles.sectionTitle}>Testigo 2</Text>
+              <Field
+                label="nombre"
+                value={firmaTestigos[1].nombre ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { nombre: v })}
+              />
+              <Field
+                label="apellido"
+                value={firmaTestigos[1].apellido ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { apellido: v })}
+              />
+              <Field
+                label="dni"
+                value={firmaTestigos[1].dni ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { dni: v })}
+                keyboardType="numeric"
+              />
+              <Field
+                label="domicilio (opcional)"
+                value={firmaTestigos[1].domicilio ?? ''}
+                onChangeText={(v) => updateFirmaTestigo(1, { domicilio: v })}
+              />
+            </View>
+          ) : (
+            <Text style={styles.helperText}>
+              Para habilitar este tab, marcá el infractor como fugado en el formulario del acta.
+            </Text>
+          )}
+
+          {/*
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>El infractor se negó a firmar</Text>
             <Switch
@@ -1653,6 +1740,7 @@ export function NuevaActaScreen({
             Firma funcionario: {firmaOficialBase64.trim() ? 'OK' : 'Pendiente'} | Firma infractor:{' '}
             {firmaSeNegoAFirmar ? 'Negada' : firmaInfractorBase64?.trim() ? 'OK' : 'Pendiente'}
           </Text>
+          */}
         </Section>
       ) : null}
 
@@ -1996,7 +2084,7 @@ function buildActaRequestSafe(input: {
   graduacionAlcoholica: number;
   infractorFugado: boolean;
   juzgado: number;
-  firma?: ActaRequest['firma'];
+  testigos: ActaRequest['testigos'];
 }): Partial<ActaRequest> {
   const idPuestoValue = input.idPuesto ?? undefined;
 
@@ -2061,7 +2149,7 @@ function buildActaRequestSafe(input: {
     graduacionAlcoholica: input.graduacionAlcoholica,
     infractorFugado: input.infractorFugado,
     juzgado: input.juzgado,
-    firma: input.firma,
+    testigos: input.testigos,
   };
 }
 

@@ -10,7 +10,6 @@ import {
   setupBiometrics,
 } from '../services/BiometricService';
 import { setBiometricEnrollment, getEnrolledUsername } from './biometricStorage';
-import { saveJwt } from './secureJwtStorage';
 import { useAuth } from './AuthContext';
 import { decodeJwtPayload } from './jwt';
 import { isHttpDebugEnabled } from '../api/httpDebug';
@@ -106,10 +105,8 @@ export function useBiometricAuth() {
         console.log('[AUTH] biometric jwt payload', decodeJwtPayload(res.jwt));
       }
 
-      await saveJwt(res.jwt);
-
       // En esta app, "navegar" equivale a setear el JWT en el AuthContext (Root cambia a Home).
-      signInWithJwt(res.jwt);
+      signInWithJwt(res.jwt, res.refreshToken);
     } catch (e) {
       if (e instanceof BiometricsCancelledError) {
         // No hacemos nada si el usuario cancela el prompt biometrico.

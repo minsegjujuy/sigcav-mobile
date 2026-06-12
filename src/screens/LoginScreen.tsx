@@ -14,7 +14,6 @@ import { Colors } from '../theme/colors';
 import { AppButton } from '../components/ui/AppButton';
 import { isBiometricEnabled } from '../auth/biometricStorage';
 import { useBiometricAuth } from '../auth/useBiometricAuth';
-import { saveJwt } from '../auth/secureJwtStorage';
 import { decodeJwtPayload } from '../auth/jwt';
 import { isHttpDebugEnabled } from '../api/httpDebug';
 import { verify as verify2fa } from '../services/AuthService';
@@ -66,6 +65,7 @@ export function LoginScreen() {
       const normalizedUsername = username.trim();
       const res = await authenticate(normalizedUsername, password);
       const jwt = (res as any)?.jwt as string | null | undefined;
+      const refreshToken = (res as any)?.refreshToken as string | null | undefined;
 
       if (!jwt) {
         setChallengeId((res as any)?.challengeId ? String((res as any).challengeId) : null);
@@ -88,8 +88,7 @@ export function LoginScreen() {
             style: 'cancel',
             onPress: () => {
               void (async () => {
-                await saveJwt(jwt);
-                signInWithJwt(jwt);
+                signInWithJwt(jwt, refreshToken);
               })();
             },
           },
@@ -99,8 +98,7 @@ export function LoginScreen() {
               void (async () => {
                 await handleEnrollment(normalizedUsername, jwt);
                 setBioEnabled(true);
-                await saveJwt(jwt);
-                signInWithJwt(jwt);
+                signInWithJwt(jwt, refreshToken);
               })();
             },
           },
@@ -143,6 +141,7 @@ export function LoginScreen() {
     try {
       const res = await verify2fa({ challengeId: cid, code });
       const jwt = (res as any)?.jwt as string | null | undefined;
+      const refreshToken = (res as any)?.refreshToken as string | null | undefined;
       if (!jwt) {
         setTwoFactorMessage((res as any)?.message ? String((res as any).message) : 'Código inválido.');
         return;
@@ -168,8 +167,7 @@ export function LoginScreen() {
             style: 'cancel',
             onPress: () => {
               void (async () => {
-                await saveJwt(jwt);
-                signInWithJwt(jwt);
+                signInWithJwt(jwt, refreshToken);
               })();
             },
           },
@@ -179,8 +177,7 @@ export function LoginScreen() {
               void (async () => {
                 await handleEnrollment(normalizedUsername, jwt);
                 setBioEnabled(true);
-                await saveJwt(jwt);
-                signInWithJwt(jwt);
+                signInWithJwt(jwt, refreshToken);
               })();
             },
           },

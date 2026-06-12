@@ -2,6 +2,7 @@ import { postJson } from '../api/http';
 import type {
   AuthenticationResponse,
   MessageResponse,
+  RefreshTokenRequest,
   TwoFactorResendRequest,
   TwoFactorVerifyRequest,
 } from '../features/auth/types';
@@ -17,3 +18,11 @@ export const resend = async (data: TwoFactorResendRequest): Promise<MessageRespo
   return postJson<TwoFactorResendRequest, MessageResponse>(baseURL, '/auth/2fa/resend', data);
 };
 
+export const refreshMobile = async (data: RefreshTokenRequest): Promise<AuthenticationResponse> => {
+  const baseURL = requireApiBaseUrl();
+  return postJson<RefreshTokenRequest, AuthenticationResponse>(
+    baseURL,
+    '/auth/refresh-mobile',
+    data
+  );
+};

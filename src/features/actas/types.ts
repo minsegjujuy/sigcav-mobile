@@ -19,7 +19,8 @@ export interface ActaRequest {
   infractorFugado: boolean;
   juzgado?: number;
   ubicacionRequest: UbicacionRequest;
-  firma?: FirmaDTO;
+  //firma?: FirmaDTO;
+  testigos: TestigoRequest[];
 }
 
 export interface UbicacionRequest {

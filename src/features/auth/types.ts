@@ -8,6 +8,7 @@ export interface AuthenticationResponse {
   requiresTwoFactor: boolean;
   challengeId: string;
   message: string;
+  refreshToken: string;
 }
 
 export interface TwoFactorVerifyRequest {
@@ -17,6 +18,10 @@ export interface TwoFactorVerifyRequest {
 
 export interface TwoFactorResendRequest {
   challengeId: string;
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
 }
 
 export interface MessageResponse {

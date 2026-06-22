@@ -36,6 +36,7 @@ export function installAuthRefreshInterceptor(): void {
     isRefreshing = true;
     try {
       const refreshedJwt = await refreshAuthSession();
+      //alert(`refreshedJwt ${refreshedJwt}` )
       if (!refreshedJwt) {
         return response;
       }

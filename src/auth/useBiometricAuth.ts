@@ -54,6 +54,7 @@ export function useBiometricAuth() {
         authJwt ?? jwt ?? undefined
       );
 
+
       const enrolledUsername = pickEnrolledUsername(normalizedUsername, serverMessage);
       await setBiometricEnrollment(enrolledUsername);
 
@@ -99,12 +100,12 @@ export function useBiometricAuth() {
 
       const baseUrl = requireApiBaseUrl();
       const res = await biometricLogin(baseUrl, dto);
+      
 
       if (isHttpDebugEnabled()) {
         // eslint-disable-next-line no-console
         console.log('[AUTH] biometric jwt payload', decodeJwtPayload(res.jwt));
       }
-
       // En esta app, "navegar" equivale a setear el JWT en el AuthContext (Root cambia a Home).
       signInWithJwt(res.jwt, res.refreshToken);
     } catch (e) {

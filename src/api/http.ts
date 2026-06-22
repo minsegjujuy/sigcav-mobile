@@ -56,7 +56,7 @@ function notifyHttpError(status: number, bodyText: string | null) {
   }
 
   const mapped = getValidationError(status);
-  SnackbarUtilities.error(mapped ?? backendMessage ?? `Error HTTP ${status}.`);
+  SnackbarUtilities.info(mapped ?? backendMessage ?? `Error HTTP ${status}.`);
 }
 
 export async function getJson<TResponse>(

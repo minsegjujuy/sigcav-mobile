@@ -53,14 +53,18 @@ export interface InfractorSolicitud {
   fechaNacimiento?: string;
   localidad?: string;
   provincia: string;
+  licencia: LicenciaRequest;
+  propietario: boolean;
+}
+
+export interface LicenciaRequest{
   // licencia
-  idLic?: number;
+  id?: number;
   clase?: string;
   numero?: string;
   autoridadExpedicion?: string;
   fechaExpedicion?: string;
   fechaVencimiento?: string;
-  propietario: boolean;
 }
 
 export interface TestigoRequest {

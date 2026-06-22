@@ -43,8 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const token = await authenticate(username, password);
           const jwtMaybe = (token as any)?.jwt as string | null | undefined;
           const refreshTokenMaybe = (token as any)?.refreshToken as string | null | undefined;
+          //alert(`refresh ${refreshToken}`)
           if (!jwtMaybe) {
-            throw new Error('Se requiere verificaciÃ³n de dos factores para completar el inicio de sesiÃ³n.');
+            throw new Error('Se requiere verificacion de dos factores para completar el inicio de sesion.');
           }
           await setAuthSession(jwtMaybe, refreshTokenMaybe ?? null);
         },

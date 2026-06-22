@@ -2,6 +2,7 @@ import { requireApiBaseUrl } from '../services/_serviceUtils';
 import type { AuthenticationResponse } from '../features/auth/types';
 import { clearJwt, loadJwt, saveJwt } from './secureJwtStorage';
 import { clearRefreshToken, loadRefreshToken, saveRefreshToken } from './secureRefreshTokenStorage';
+import { refreshMobile } from '../services/AuthService';
 
 export type AuthSession = {
   jwt: string | null;
@@ -74,26 +75,20 @@ export async function clearAuthSession(): Promise<void> {
 
 export async function refreshAuthSession(): Promise<string | null> {
   const refreshToken = currentSession.refreshToken?.trim() || (await loadRefreshToken())?.trim() || '';
+  
   if (!refreshToken) {
     return null;
   }
 
-  const baseUrl = requireApiBaseUrl();
-  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/auth/refresh-mobile`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ refreshToken }),
-  });
-
-  if (!response.ok) {
+  //const baseUrl = requireApiBaseUrl();
+  const response = await refreshMobile({refreshToken});
+  
+  if (!response) {
     await clearAuthSession();
     return null;
   }
 
-  const data = (await response.json()) as AuthenticationResponse;
+  const data = (await response) as AuthenticationResponse;
   const nextJwt = (data?.jwt ?? '').trim();
   const nextRefreshToken = (data?.refreshToken ?? '').trim();
   if (!nextJwt || !nextRefreshToken) {

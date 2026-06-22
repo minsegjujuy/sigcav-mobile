@@ -28,7 +28,7 @@ import type { Localidad, UnidadRegional } from '../features/ubicacion/types';
 import { MultiSelectPicker } from '../components/forms/MultiSelectPicker';
 import { findInfractorByDni } from '../services/InfractorService';
 import { HttpError } from '../api/http';
-import type { Vehiculo as VehiculoBackend } from '../features/infractores/types';
+import type { Licencia, Vehiculo as VehiculoBackend } from '../features/infractores/types';
 // import { SignaturePadSkia } from '../components/signature/SignaturePadSkia';
 import { PhotoPicker, type PhotoValue } from '../components/media/PhotoPicker';
 import { OcrService } from '../services/OcrService';
@@ -55,6 +55,7 @@ export function NuevaActaScreen({
   onEditActaConsumed?: () => void;
 }) {
   const OTRO_VEHICULO_ID = -1;
+  const OTRA_LICENCIA_ID = -1;
   const [tab, setTab] = useState<ActaFormTabKey>('acta');
   const insets = useSafeAreaInsets();
 
@@ -137,6 +138,7 @@ export function NuevaActaScreen({
   const [graduacionAlcoholica, setGraduacionAlcoholica] = useState('');
   const [infractorFugado, setInfractorFugado] = useState(false);
   const [juzgadoId, setJuzgadoId] = useState<number | null>(null);
+  const [licencias, setLicencias] = useState<Licencia[]>([]);
 
   const skipClearArticulosOnLeyChangeRef = useRef(false);
   const pendingInferLeyArticulosRef = useRef<number[] | null>(null);
@@ -438,7 +440,8 @@ export function NuevaActaScreen({
 
       const isInfractorOwner = data.propietario ?? true;
       const vehiculosFromBackend = data.vehiculos ?? [];
-      const licencia = (data.licencias ?? [])[0] ?? null;
+      //const licencia = (data.licencias ?? [])[0] ?? null;
+      setLicencias(data.licencias);
 
       const normalized = normalizeInfractorNombreApellido({
         nombre: data.nombre ?? '',
@@ -455,13 +458,6 @@ export function NuevaActaScreen({
       setInfractorProvincia((data.provincia ?? '') || '');
       setInfractorFechaNacimiento(isoToDdMmYyyy(data.fechaNacimiento) ?? '');
       setInfractorPropietario(isInfractorOwner);
-
-      setLicenciaId(licencia?.id ?? null);
-      setLicenciaClase(licencia?.clase ?? '');
-      setLicenciaNumero(licencia?.numero ?? '');
-      setLicenciaAutoridadExpedicion(licencia?.autoridadExpedicion ?? '');
-      setLicenciaFechaExpedicion(isoToDdMmYyyy(licencia?.fechaExpedicion) ?? '');
-      setLicenciaFechaVencimiento(isoToDdMmYyyy(licencia?.fechaVencimiento) ?? '');
 
       setVehiculosEncontrados(vehiculosFromBackend);
       setVehiculoSeleccionadoId(vehiculosFromBackend.length === 1 ? vehiculosFromBackend[0]?.idVeh ?? null : null);
@@ -736,12 +732,12 @@ export function NuevaActaScreen({
       setInfractorProvincia(data.provincia ?? '');
       setInfractorFechaNacimiento(isoToDdMmYyyy(data.fechaNacimiento) ?? (data.fechaNacimiento ?? ''));
 
-      setLicenciaId(data.idLic ?? null);
-      setLicenciaClase(data.clase ?? '');
-      setLicenciaNumero(data.numero ?? '');
-      setLicenciaAutoridadExpedicion(data.autoridadExpedicion ?? '');
-      setLicenciaFechaExpedicion(isoToDdMmYyyy(data.fechaExpedicion) ?? (data.fechaExpedicion ?? ''));
-      setLicenciaFechaVencimiento(isoToDdMmYyyy(data.fechaVencimiento) ?? (data.fechaVencimiento ?? ''));
+      setLicenciaId(data.licencia.id ?? null);
+      setLicenciaClase(data.licencia.clase ?? '');
+      setLicenciaNumero(data.licencia.numero ?? '');
+      setLicenciaAutoridadExpedicion(data.licencia.autoridadExpedicion ?? '');
+      setLicenciaFechaExpedicion(isoToDdMmYyyy(data.licencia.fechaExpedicion) ?? (data.licencia.fechaExpedicion ?? ''));
+      setLicenciaFechaVencimiento(isoToDdMmYyyy(data.licencia.fechaVencimiento) ?? (data.licencia.fechaVencimiento ?? ''));
 
       if (typeof (data as any).propietario === 'boolean') {
         setInfractorPropietario((data as any).propietario);
@@ -1413,40 +1409,104 @@ export function NuevaActaScreen({
             {infractorSearchMessage ? <Text style={styles.helperText}>{infractorSearchMessage}</Text> : null}
           </View>
 
-            <PhotoPicker label="Licencia nacional (foto)" value={licenciaNacFoto} onChange={setLicenciaNacFoto} />
-            <AppButton
-              title="Procesar"
-              icon="document-scanner"
-              size="sm"
-              onPress={procesarLicenciaNacional}
-              loading={isOcrLicBusy}
-              disabled={!licenciaNacFoto || isOcrLicBusy}
-            />
-            {ocrLicMessage ? (
-              <Text style={ocrLicMessage.includes('HTTP') ? styles.errorText : styles.helperText}>
-                {ocrLicMessage}
-              </Text>
-            ) : null}
+          {adjuntaSeleccionadas.includes('LICENCIA NACIONAL DE CONDUCIR') && (
+              <>
+                <PhotoPicker label="Licencia nacional (foto)" value={licenciaNacFoto} onChange={setLicenciaNacFoto} />
+                <AppButton
+                  title="Procesar"
+                  icon="document-scanner"
+                  size="sm"
+                  onPress={procesarLicenciaNacional}
+                  loading={isOcrLicBusy}
+                  disabled={!licenciaNacFoto || isOcrLicBusy}
+                />
+                {ocrLicMessage ? (
+                  <Text style={ocrLicMessage.includes('HTTP') ? styles.errorText : styles.helperText}>
+                    {ocrLicMessage}
+                  </Text>
+                ) : null}
+              </>
+            )}
+            {adjuntaSeleccionadas.some(item => item.includes('LICENCIA')) && (
+              <>
+                {licencias.length ? (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.label}>Licencias registradas</Text>
+                  {licencias.map((l) => {
+                    const isSelected = l.id === licenciaId;
+                    const clase = (l.clase ?? '').trim();
+                    const numero = (l.numero ?? '').trim();
+                    const autoridad = (l.autoridadExpedicion ?? '').trim();
+                    const vto = (l.fechaVencimiento ?? '').trim();
+                    const label = numero
+                      ? `${numero} - ${clase} - ${autoridad} - Vto. ${convertYyyyMmDdToDdMmYyyy(vto)}`
+                      : `Licencia #${l.id}`;
 
-            <Field label="clase (opcional)" value={licenciaClase} onChangeText={setLicenciaClase} />
-            <Field label="numero (opcional)" value={licenciaNumero} onChangeText={setLicenciaNumero} />
-            <Field
-              label="autoridadExpedicion (opcional)"
-              value={licenciaAutoridadExpedicion}
-              onChangeText={setLicenciaAutoridadExpedicion}
-            />
-            <PickerField
-              label="fechaExpedicion"
-              valueText={licenciaFechaExpedicion}
-              placeholder="Selecciona una fecha"
-              onPress={() => openDatePicker('licencia_expedicion', 'date', licenciaFechaExpedicion)}
-            />
-            <PickerField
-              label="fechaVencimiento"
-              valueText={licenciaFechaVencimiento}
-              placeholder="Selecciona una fecha"
-              onPress={() => openDatePicker('licencia_vencimiento', 'date', licenciaFechaVencimiento)}
-            />
+                    return (
+                      <Pressable
+                        key={l.id}
+                        onPress={() => {
+                          setLicenciaId(l.id!);
+                          setLicenciaAutoridadExpedicion(l.autoridadExpedicion!)
+                          setLicenciaClase(l.clase!)
+                          setLicenciaFechaExpedicion(convertYyyyMmDdToDdMmYyyy(l.fechaExpedicion!)!)
+                          setLicenciaFechaVencimiento(convertYyyyMmDdToDdMmYyyy(l.fechaVencimiento)!)
+                          setLicenciaNumero(l.numero)
+                        }}
+                        style={[styles.optionRow, isSelected ? styles.optionRowActive : null]}
+                      >
+                        <Text style={styles.optionText}>{isSelected ? `(x) ${label}` : `( ) ${label}`}</Text>
+                      </Pressable>
+                    );
+                  })}
+                  <Pressable
+                    onPress={() => {
+                      setLicenciaId(OTRA_LICENCIA_ID);
+                      setLicenciaAutoridadExpedicion('')
+                      setLicenciaClase('')
+                      setLicenciaFechaExpedicion('')
+                      setLicenciaFechaVencimiento('')
+                      setLicenciaNumero('')
+                    }}
+                    style={[styles.optionRow, licenciaId === OTRA_LICENCIA_ID ? styles.optionRowActive : null]}
+                  >
+                    <Text style={styles.optionText}>
+                      {licenciaId === OTRA_LICENCIA_ID
+                        ? '(x) Otro (Licencia nueva)'
+                        : '( ) Otro (Licencia nueva)'}
+                    </Text>
+                  </Pressable>
+                  {!licenciaId || licenciaId === OTRA_LICENCIA_ID ? (
+                    <Text style={styles.helperText}>
+                      Seleccioná una licencia para autocompletar o completá los datos manualmente.
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <Text style={styles.helperText}>No hay licencias cargadas para este infractor.</Text>
+              )}
+                <Field label="clase (opcional)" value={licenciaClase} onChangeText={setLicenciaClase} />
+                <Field label="numero (opcional)" value={licenciaNumero} onChangeText={setLicenciaNumero} />
+                <Field
+                  label="autoridadExpedicion (opcional)"
+                  value={licenciaAutoridadExpedicion}
+                  onChangeText={setLicenciaAutoridadExpedicion}
+                />
+                <PickerField
+                  label="fechaExpedicion"
+                  valueText={licenciaFechaExpedicion}
+                  placeholder="Selecciona una fecha"
+                  onPress={() => openDatePicker('licencia_expedicion', 'date', licenciaFechaExpedicion)}
+                />
+                <PickerField
+                  label="fechaVencimiento"
+                  valueText={licenciaFechaVencimiento}
+                  placeholder="Selecciona una fecha"
+                  onPress={() => openDatePicker('licencia_vencimiento', 'date', licenciaFechaVencimiento)}
+                />
+              </>
+            )}
+            
           </View>
 
           
@@ -1789,7 +1849,7 @@ export function NuevaActaScreen({
                     label="Año"
                     value={datePicker.year}
                     min={1900}
-                    max={new Date().getFullYear() + 1}
+                    max={2100}
                     onChange={(year) => setDatePicker((p) => (p ? { ...p, year } : p))}
                   />
 
@@ -2029,6 +2089,28 @@ function parseDdMmYyyyHhMm(
   return { ...datePart, hour, minute };
 }
 
+function convertYyyyMmDdToDdMmYyyy(dateStr: string): string | null {
+  // 1. Limpiamos espacios en blanco al inicio y al final
+  const raw = (dateStr ?? '').trim();
+
+  // 2. Validamos que cumpla estrictamente con el formato AAAA-MM-DD
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  
+  // Si no coincide con el formato, devolvemos null (o podrías lanzar un error)
+  if (!match) return null;
+
+  // 3. Extraemos las partes (match[1] = año, match[2] = mes, match[3] = día)
+  const [_, year, month, day] = match;
+
+  // 4. Retornamos el nuevo formato usando un Template String
+  return `${day}-${month}-${year}`;
+}
+
+// --- Ejemplos de uso ---
+console.log(convertYyyyMmDdToDdMmYyyy("2028-12-25")); // Devuelve: "25-12-2028"
+console.log(convertYyyyMmDdToDdMmYyyy("2026-06-20")); // Devuelve: "20-06-2026"
+console.log(convertYyyyMmDdToDdMmYyyy("texto-invalido")); // Devuelve: null
+
 function parseArticulosCsv(csv: string): number[] {
   return csv
     .split(',')
@@ -2119,12 +2201,14 @@ function buildActaRequestSafe(input: {
       localidad: input.infractorLocalidad || undefined,
       provincia: input.infractorProvincia,
       fechaNacimiento: ddMmYyyyToIso(input.infractorFechaNacimiento),
-      idLic: input.licenciaId ?? undefined,
-      clase: input.licenciaClase || undefined,
-      numero: input.licenciaNumero || undefined,
-      autoridadExpedicion: input.licenciaAutoridadExpedicion || undefined,
-      fechaExpedicion: ddMmYyyyToIso(input.licenciaFechaExpedicion),
-      fechaVencimiento: ddMmYyyyToIso(input.licenciaFechaVencimiento),
+      licencia: {
+        id: input.licenciaId || undefined,
+        autoridadExpedicion: input.licenciaAutoridadExpedicion,
+        clase: input.licenciaClase,
+        fechaExpedicion: ddMmYyyyToIso(input.licenciaFechaExpedicion),
+        fechaVencimiento: ddMmYyyyToIso(input.licenciaFechaVencimiento),
+        numero: input.licenciaNumero
+      },
       propietario: input.infractorPropietario,
     },
     vehiculo: {

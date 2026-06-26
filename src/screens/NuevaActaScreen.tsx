@@ -43,6 +43,7 @@ import { UbicacionSection } from '../components/map/UbicacionSection';
 import { Section } from '../components/ui/Section';
 import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
 import { TIPOS_INVOLUCRADOS } from './HechosVialesScreen';
+import { DateFieldString } from '../components/ui/SelectedFieldString';
 
 type ActaFormTabKey = 'acta' | 'infractor' | 'vehiculo' | 'firma';
 type DatePickerTarget = 'acta_fecha' | 'infractor_nacimiento' | 'licencia_expedicion' | 'licencia_vencimiento';
@@ -65,7 +66,7 @@ export function NuevaActaScreen({
   );
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [tipos, setTipos] = useState<Tipo[]>([]);
+  const [tipos, setTipos] = useState<Tipo[]>([{descripcion:'SERIE B', detalle:'SERIE B', idTipo: 2}]);
   const [puestos, setPuestos] = useState<Puesto[]>([]);
   const [leyes, setLeyes] = useState<Ley[]>([]);
   const [juzgados, setJuzgados] = useState<Juzgado[]>([]);
@@ -238,6 +239,140 @@ export function NuevaActaScreen({
     initialValueText: string;
   } | null>(null);
 
+  const validateActa = (): boolean => {
+    // — ACTA —
+    if (!idGrupo) {
+      setSaveActaMessage('Falta seleccionar Grupo.');
+      return false;
+    }
+    if (!idTipo) {
+      setSaveActaMessage('Falta seleccionar Tipo.');
+      return false;
+    }
+    if (!idPuesto) {
+      setSaveActaMessage('Falta seleccionar Puesto.');
+      return false;
+    }
+    if(!juzgadoId){
+      setSaveActaMessage('Falta seleccionar Juzgado.');
+      return false;
+    }
+    if (!fecha.trim()) {
+      setSaveActaMessage('Falta completar la Fecha.');
+      return false;
+    }
+    if (!motivo) {
+      setSaveActaMessage('Falta seleccionar el Motivo.');
+      return false;
+    }
+    if (!nro.trim() && idTipo != 3) {
+      setSaveActaMessage('Falta completar el Número de Acta.');
+      return false;
+    }
+    if(articulosSeleccionados.length === 0){
+      setSaveActaMessage('Falta seleccionar articulos.');
+      return false;
+    }
+    // — UBICACIÓN —
+    if (!ubicLat.trim() || !ubicLng.trim()) {
+      setSaveActaMessage('Falta registrar las coordenadas de la ubicación.');
+      return false;
+    }
+    if (!ubicUnidadRegional) {
+      setSaveActaMessage('Falta seleccionar la Unidad Regional.');
+      return false;
+    }
+    if (!ubicDepartamento.trim()) {
+      setSaveActaMessage('Falta completar el Departamento de la ubicación.');
+      return false;
+    }
+    if (!ubicLocalidad) {
+      setSaveActaMessage('Falta seleccionar la Localidad de la ubicación.');
+      return false;
+    }
+    if (!ubicDescripcion.trim()) {
+      setSaveActaMessage('Falta completar la Descripción de la ubicación.');
+      return false;
+    }
+
+    // — INFRACTOR —
+    if (!infractorDni.trim()) {
+      setSaveActaMessage('Falta completar el DNI del infractor.');
+      return false;
+    }
+    if (!infractorNombre.trim()) {
+      setSaveActaMessage('Falta completar el Nombre del infractor.');
+      return false;
+    }
+    if (!infractorApellido.trim()) {
+      setSaveActaMessage('Falta completar el Apellido del infractor.');
+      return false;
+    }
+    if (!infractorNacionalidad.trim()) {
+      setSaveActaMessage('Falta completar la Nacionalidad del infractor.');
+      return false;
+    }
+    if (!infractorDomicilio.trim()) {
+      setSaveActaMessage('Falta completar el Domicilio del infractor.');
+      return false;
+    }
+    if (!infractorLocalidad.trim()) {
+      setSaveActaMessage('Falta completar la Localidad del infractor.');
+      return false;
+    }
+    if (!infractorProvincia.trim()) {
+      setSaveActaMessage('Falta completar la Provincia del infractor.');
+      return false;
+    }
+    if (!infractorFechaNacimiento.trim()) {
+      setSaveActaMessage('Falta completar la Fecha de Nacimiento del infractor.');
+      return false;
+    }
+    
+    // — VEHÍCULO —
+    if (!vehiculoDominio.trim()) {
+      setSaveActaMessage('Falta completar el Dominio del vehículo.');
+      return false;
+    }
+    if (!vehiculoMarca.trim()) {
+      setSaveActaMessage('Falta completar la Marca del vehículo.');
+      return false;
+    }
+    if (!vehiculoModelo.trim()) {
+      setSaveActaMessage('Falta completar el Modelo del vehículo.');
+      return false;
+    }
+    if (!vehiculoTipoRodado.trim()) {
+      setSaveActaMessage('Falta completar el Tipo de Rodado del vehículo.');
+      return false;
+    }
+
+    // — PROPIETARIO (solo si el infractor no es el propietario) —
+    if (!infractorPropietario) {
+      if (!propietarioNombre.trim()) {
+        setSaveActaMessage('Falta completar el Nombre del propietario.');
+        return false;
+      }
+      if (!propietarioApellido.trim()) {
+        setSaveActaMessage('Falta completar el Apellido del propietario.');
+        return false;
+      }
+      if (!propietarioDni.trim()) {
+        setSaveActaMessage('Falta completar el DNI del propietario.');
+        return false;
+      }
+      if (!propietarioDireccion.trim()) {
+        setSaveActaMessage('Falta completar la Dirección del propietario.');
+        return false;
+      }
+    }
+
+    if(infractorFugado){
+
+    }
+    return true;
+  };
+
   useEffect(() => {
     if (!datePicker) return;
     const maxDay = daysInMonth(datePicker.year, datePicker.month);
@@ -261,7 +396,8 @@ export function NuevaActaScreen({
         ]);
         if (!isMounted) return;
         setGrupos(gruposRes);
-        setTipos(tiposRes);
+        // Agregamos los tres puntos también a tiposRes
+        setTipos((prevTipos) => [...prevTipos, ...tiposRes]);
         setPuestos(puestosRes);
         setLeyes(leyesRes);
         setJuzgados(juzgadosRes);
@@ -456,7 +592,7 @@ export function NuevaActaScreen({
       setInfractorNacionalidad((data.nacionalidad ?? '') || '');
       setInfractorLocalidad((data.localidad ?? '') || '');
       setInfractorProvincia((data.provincia ?? '') || '');
-      setInfractorFechaNacimiento(isoToDdMmYyyy(data.fechaNacimiento) ?? '');
+      setInfractorFechaNacimiento(data.fechaNacimiento ?? '');
       setInfractorPropietario(isInfractorOwner);
 
       setVehiculosEncontrados(vehiculosFromBackend);
@@ -564,20 +700,10 @@ export function NuevaActaScreen({
   }
 
   async function guardarActa() {
-    setSaveActaMessage(null);
+    //setSaveActaMessage(null);
 
-    if (!idGrupo) {
-      setSaveActaMessage('Falta seleccionar Grupo.');
-      return;
-    }
-    if (!idTipo) {
-      setSaveActaMessage('Falta seleccionar Tipo.');
-      return;
-    }
-    if (!fecha.trim()) {
-      setSaveActaMessage('Falta completar fecha.');
-      return;
-    }
+    if (!validateActa()) return;
+
     if (infractorFugado) {
       const normalized = firmaTestigos.map((t) => ({
         nombre: (t.nombre ?? '').trim(),
@@ -604,9 +730,6 @@ export function NuevaActaScreen({
         : await crearActa(actaDraft as ActaRequest, jwt);
       console.log(isEditing ? 'Acta actualizada:' : 'Acta creada:', saved);
       SnackbarUtilities.success('Acta guardada exitosamente');
-      setSaveActaMessage(
-        `${isEditing ? 'Acta actualizada' : 'Acta enviada'}. idActa: ${(saved as any)?.idActa ?? '(sin id)'}`
-      );
       resetActaForm();
     } catch (e) {
       if (e instanceof HttpError) {
@@ -635,8 +758,8 @@ export function NuevaActaScreen({
     setFecha(isoLocalDateTimeToDdMmYyyyHhMm(editActa.fecha ?? ''));
     setMotivo(editActa.motivo ?? null);
     setNro(editActa.nro ?? '');
-    setJuzgadoId(editActa.juzgado ?? 1)
-    setInfractorFugado(editActa.infractorFugado ?? false)
+    setJuzgadoId(editActa.juzgado ?? null)
+    setInfractorFugado(editActa.infractorFugado)
     setRetencionVehiculo(editActa.retencionVehiculo ?? false)
     pendingInferLeyArticulosRef.current = (editActa.articulos ?? []).length ? (editActa.articulos ?? []) : null;
     setIdLey(null);
@@ -667,15 +790,15 @@ export function NuevaActaScreen({
     setInfractorDomicilio(inf?.domicilio ?? '');
     setInfractorLocalidad(inf?.localidad ?? '');
     setInfractorProvincia(inf?.provincia ?? '');
-    setInfractorFechaNacimiento(isoToDdMmYyyy(inf?.fechaNacimiento) ?? (inf?.fechaNacimiento ?? ''));
-    setInfractorPropietario(!!inf?.propietario);
-    setInfractorPropietario(inf.propietario);
-    setLicenciaId((inf as any)?.idLic ?? null);
-    setLicenciaClase((inf as any)?.clase ?? '');
-    setLicenciaNumero((inf as any)?.numero ?? '');
-    setLicenciaAutoridadExpedicion((inf as any)?.autoridadExpedicion ?? '');
-    setLicenciaFechaExpedicion(isoToDdMmYyyy((inf as any)?.fechaExpedicion) ?? ((inf as any)?.fechaExpedicion ?? ''));
-    setLicenciaFechaVencimiento(isoToDdMmYyyy((inf as any)?.fechaVencimiento) ?? ((inf as any)?.fechaVencimiento ?? ''));
+    setInfractorFechaNacimiento(inf?.fechaNacimiento ?? '');
+    setInfractorPropietario(inf?.propietario);
+    setLicenciaId(inf.licencia?.id ?? null);
+    setLicenciaClase(inf.licencia?.clase ?? '');
+    setLicenciaNumero(inf.licencia?.numero ?? '');
+    setLicenciaAutoridadExpedicion(inf.licencia?.autoridadExpedicion ?? '');
+    setLicenciaFechaExpedicion(isoToDdMmYyyy(inf.licencia?.fechaExpedicion) ?? (inf.licencia?.fechaExpedicion ?? ''));
+    setLicenciaFechaVencimiento(isoToDdMmYyyy(inf.licencia?.fechaVencimiento) ?? (inf.licencia?.fechaVencimiento ?? ''));
+    //setInfractorPropietario(inf.pr);
 
     const veh = editActa.vehiculo;
     setVehiculosEncontrados([]);
@@ -954,7 +1077,7 @@ export function NuevaActaScreen({
   setFirmaInfractorBase64(null);
   setFirmaOficialBase64('');
   */
-  setJuzgadoId(0);
+  setJuzgadoId(null);
   //setFirmaDto('');
 };
 
@@ -1004,7 +1127,7 @@ export function NuevaActaScreen({
       retencionVehiculo,
       graduacionAlcoholica: graduacionAlcoholicaValue,
       infractorFugado,
-      juzgado: juzgadoId ?? 0,
+      juzgado: juzgadoId,
       testigos: testigosActa,
     });
   }, [
@@ -1184,7 +1307,7 @@ export function NuevaActaScreen({
           disabled={isSavingActa}
         />
         {saveActaMessage ? (
-          <Text style={saveActaMessage.includes('HTTP') ? styles.errorText : styles.helperText}>
+          <Text style={styles.errorText}>
             {saveActaMessage}
           </Text>
         ) : null}
@@ -1192,7 +1315,7 @@ export function NuevaActaScreen({
 
       {infractorFugado ? (
         <Text style={styles.helperText}>
-          Infractor fugado activo: en la pestaña de firma solo se cargarán los dos testigos.
+          Infractor fugado activo: en la pestaña de firma solo se cargarán los dos testigos. No se puede editar una vez cargado.
         </Text>
       ) : null}
 
@@ -1243,7 +1366,7 @@ export function NuevaActaScreen({
           />
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>infractor fugado</Text>
-            <Switch value={infractorFugado} onValueChange={setInfractorFugado} />
+            <Switch value={infractorFugado} onValueChange={(value) => setInfractorFugado(value)} />
           </View>
           <PickerField
             label="fecha"
@@ -1520,11 +1643,14 @@ export function NuevaActaScreen({
           <Field label="domicilio" value={infractorDomicilio} onChangeText={setInfractorDomicilio} />
           <Field label="localidad" value={infractorLocalidad} onChangeText={setInfractorLocalidad} />
           <Field label="provincia" value={infractorProvincia} onChangeText={setInfractorProvincia} />
-          <PickerField
-            label="fechaNacimiento"
-            valueText={infractorFechaNacimiento}
+          <DateFieldString
+            label="fecha nacimiento"
+            value={infractorFechaNacimiento}
+            onChangeValue={(value) => setInfractorFechaNacimiento(value!)}
+            //valueText={infractorFechaNacimiento}
             placeholder="Selecciona una fecha"
-            onPress={() => openDatePicker('infractor_nacimiento', 'date', infractorFechaNacimiento)}
+            allowClear
+            //onPress={() => openDatePicker('infractor_nacimiento', 'date', infractorFechaNacimiento)}
           />
         </Section>
       ) : null}
@@ -1719,7 +1845,7 @@ export function NuevaActaScreen({
             </View>
           ) : (
             <Text style={styles.helperText}>
-              Para habilitar este tab, marcá el infractor como fugado en el formulario del acta.
+              Para habilitar esta solapa, marcá el infractor como fugado en el formulario del acta.
             </Text>
           )}
 
@@ -2165,7 +2291,7 @@ function buildActaRequestSafe(input: {
   retencionVehiculo: boolean;
   graduacionAlcoholica: number;
   infractorFugado: boolean;
-  juzgado: number;
+  juzgado: number | null;
   testigos: ActaRequest['testigos'];
 }): Partial<ActaRequest> {
   const idPuestoValue = input.idPuesto ?? undefined;
@@ -2232,7 +2358,7 @@ function buildActaRequestSafe(input: {
     retencionVehiculo: input.retencionVehiculo,
     graduacionAlcoholica: input.graduacionAlcoholica,
     infractorFugado: input.infractorFugado,
-    juzgado: input.juzgado,
+    juzgado: input.juzgado || undefined,
     testigos: input.testigos,
   };
 }

@@ -3,7 +3,7 @@ const config  = {
     "jsEngine": "hermes",
     "name": "PERSONAL DE CALLE",
     "slug": "seguridadvial_movil",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -51,7 +51,7 @@ const config  = {
       "eas": {
         "projectId": "83149d58-c3f3-4b11-aa32-5a8270cfb2ef"
       },
-      EXPO_PUBLIC_API_URL: "https://70e1-190-226-10-120.ngrok-free.app"
+      EXPO_PUBLIC_API_URL: "x"
     }
   }
 }

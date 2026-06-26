@@ -25,6 +25,7 @@ import { actaResumenToActaRequest } from '../utils/actaResumenToActaRequest';
 import { HttpError } from '../api/http';
 import { printTest } from './TestPrint';
 import { getSelectedPrinterAddress, sendPrintZpl } from '../services/BluetoothPrintService';
+import { validarPeriodoDiasISO } from '../utils/formatearFecha';
 
 export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest) => void }) {
   const { jwt } = useAuth();
@@ -389,7 +390,7 @@ function ActaCard({
             disabled={isPdfBusy}
           />
         ) : null}
-        <AppButton title="Editar" icon="edit" iconOnly size="sm" variant="secondary" onPress={onEdit} />
+        <AppButton disabled={!validarPeriodoDiasISO(item.fecha, 1)} title="Editar" icon="edit" iconOnly size="sm" variant="secondary" onPress={onEdit} />
         <AppButton title="Imprimir" icon="print" iconOnly size="sm" variant="secondary" onPress={onZpl} />
       </View>
     </View>

@@ -33,7 +33,7 @@ export function LoginScreen() {
   const [bioEnabled, setBioEnabled] = useState(false);
   const otpRefs = useRef<Array<TextInput | null>>([]);
 
-  useEffect(() => {
+  /*useEffect(() => {
     let alive = true;
     (async () => {
       try {
@@ -56,7 +56,7 @@ export function LoginScreen() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []);*/
 
   async function onSubmit() {
     //setError(null);
@@ -339,16 +339,14 @@ export function LoginScreen() {
                 disabled={!canSubmit}
                 loading={isSubmitting}
               />
-              {bioEnabled ? (
-                <AppButton
-                  title="Ingresar con huella"
-                  icon="fingerprint"
-                  variant="secondary"
-                  onPress={onBiometricPress}
-                  disabled={isSubmitting || isBioSubmitting}
-                  loading={isBioSubmitting}
-                />
-              ) : null}
+              <AppButton
+                title="Ingresar con huella"
+                icon="fingerprint"
+                variant="secondary"
+                onPress={onBiometricPress}
+                disabled={isSubmitting || isBioSubmitting}
+                loading={isBioSubmitting}
+              />
             </>
           ) : (
             <>

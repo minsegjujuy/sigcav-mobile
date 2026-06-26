@@ -800,7 +800,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
         placeholder="Ej. En fecha 09/12/2025 a hora 00:00 por comunicación SAME/911..."
       />
 
-      <SeccionProtagonistasRN control={control} watch={watch} />
+      <SeccionProtagonistasRN control={control} watch={watch} setValue={setValue} />
 
         <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit)} />
       </ScrollView>

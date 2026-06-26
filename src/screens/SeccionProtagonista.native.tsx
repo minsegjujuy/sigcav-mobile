@@ -6,13 +6,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Controller, useController, useFieldArray } from 'react-hook-form';
+import { Controller, useController, useFieldArray, UseFormSetValue } from 'react-hook-form';
 import { SeccionAcompanantesRN } from './SeccionAcompanante.native';
 import { styles } from '../components/ui/styles';
 import { AppButton } from '../components/ui/AppButton';
 import { DateFieldString, SelectFieldString } from '../components/ui/SelectedFieldString';
 import { useAuth } from '../auth/AuthContext';
 import { getJerarquias, type Jerarquia } from '../services/JerarquiaService';
+import { calcularEdad } from '../utils/formatearFecha';
+import { HechoVialForm } from '../features/hechos-viales/types';
+//import FormData from 'react-native/types_generated/Libraries/Network/FormData';
 
 const TIPO_RODADO = [
   'AUTOMOVIL',
@@ -46,9 +49,11 @@ const ESTADO_SALUD = ['SIN LESIONES', 'HERIDO LEVE', 'HERIDO GRAVE', 'FALLECIDO'
 interface Props {
   control: any;
   watch: any;
+  editable?: boolean;
+  setValue: UseFormSetValue<HechoVialForm>
 }
 
-export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch }) => {
+export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editable, setValue }) => {
   const { jwt } = useAuth();
   const [jerarquias, setJerarquias] = useState<Jerarquia[]>([]);
   const [isLoadingJerarquias, setIsLoadingJerarquias] = useState(false);
@@ -169,19 +174,38 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch }) => {
             <ControlledInput control={control} name={`protagonistas.${index}.conductorDni`} label="DNI" keyboardType="numeric" />
             <ControlledPicker control={control} name={`protagonistas.${index}.conductorGenero`} label="Género" items={GENEROS} />
             <Controller
-              control={control}
-              name={`protagonistas.${index}.conductorFechaNacimiento`}
-              render={({ field }) => (
-                <DateFieldString
-                  label="Fecha de Nacimiento"
-                  placeholder="Seleccioná una fecha"
-                  value={field.value == null ? null : String(field.value)}
-                  onChangeValue={(v) => field.onChange(v ?? '')}
-                  allowClear
-                />
-              )}
-            />
-            <ControlledInput control={control} name={`protagonistas.${index}.conductorEdad`} label="Edad" keyboardType="numeric" />
+            control={control}
+            name={`protagonistas.${index}.conductorFechaNacimiento`}
+            render={({ field: renderField }) => (
+              <DateFieldString
+                label="Fecha de Nacimiento"
+                placeholder="Seleccioná una fecha"
+                value={renderField.value == null ? null : String(renderField.value)}
+                onChangeValue={(v) => {
+                  const fechaSeleccionada = v ?? '';
+                  renderField.onChange(fechaSeleccionada);
+
+                  if (fechaSeleccionada) {
+                    const edad = calcularEdad(fechaSeleccionada);
+                    // Pasamos el index dinámicamente para actualizar la fila correcta
+                    setValue(
+                      `protagonistas.${index}.conductorEdad`, 
+                      edad.toString(),
+                      { shouldValidate: true, shouldDirty: true }
+                    );
+                  } else {
+                    setValue(
+                      `protagonistas.${index}.conductorEdad`, 
+                      '',
+                      { shouldValidate: true, shouldDirty: true }
+                    );
+                  }
+                }}
+                allowClear
+              />
+            )}
+          />
+            <ControlledInput control={control} editable={false} name={`protagonistas.${index}.conductorEdad`} label="Edad" keyboardType="numeric" />
             <ControlledPicker control={control} name={`protagonistas.${index}.conductorNacionalidad`} label="Nacionalidad" items={NACIONALIDADES} />
 
             <ControlledPicker control={control} name={`protagonistas.${index}.licenciaTipo`} label="Tipo de licencia" items={LICENCIA_TIPO} />
@@ -223,7 +247,7 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch }) => {
               </>
             )}
 
-            <SeccionAcompanantesRN pIndex={index} control={control} />
+            <SeccionAcompanantesRN pIndex={index} control={control} setValue={setValue} />
           </View>
         );
       })}
@@ -238,6 +262,7 @@ const ControlledInput = ({
   keyboardType,
   placeholder,
   multiline,
+  editable
 }: {
   control: any;
   name: string;
@@ -245,6 +270,7 @@ const ControlledInput = ({
   keyboardType?: 'default' | 'numeric' | 'decimal-pad';
   placeholder?: string;
   multiline?: boolean;
+  editable?: boolean;
 }) => (
   <Controller
     control={control}
@@ -262,6 +288,7 @@ const ControlledInput = ({
           placeholder={placeholder}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
+          editable={editable}
         />
       </View>
     )}

@@ -5,10 +5,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Controller, useFieldArray } from 'react-hook-form';
+import { Controller, useFieldArray, UseFormSetValue } from 'react-hook-form';
 import { styles } from '../components/ui/styles';
 import { AppButton } from '../components/ui/AppButton';
 import { DateFieldString, SelectFieldString } from '../components/ui/SelectedFieldString';
+import { calcularEdad } from '../utils/formatearFecha';
+import { HechoVialForm } from '../features/hechos-viales/types';
 
 const TIPOS_DOCUMENTO = ['DNI', 'LE', 'LC', 'CI'];
 const GENEROS = ['M', 'F', 'OTRO'];
@@ -53,9 +55,10 @@ const ESTADO_SALUD = ['SIN LESIONES', 'HERIDO LEVE', 'HERIDO GRAVE', 'FALLECIDO'
 interface Props {
   pIndex: number;
   control: any;
+  setValue: UseFormSetValue<HechoVialForm>;
 }
 
-export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control }) => {
+export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setValue }) => {
   const { fields, append, remove } = useFieldArray({
     control,
     name: `protagonistas.${pIndex}.acompanantes`,
@@ -80,12 +83,34 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control }) => {
                 label="Fecha de Nacimiento"
                 placeholder="Seleccioná una fecha"
                 value={field.value == null ? null : String(field.value)}
-                onChangeValue={(v) => field.onChange(v ?? '')}
+                onChangeValue={(v) => {
+                  // 1. Actualizamos el valor de la fecha en el formulario
+                  const fechaSeleccionada = v ?? '';
+                  field.onChange(fechaSeleccionada);
+
+                  // 2. Apuntamos dinámicamente al campo de edad del acompañante específico
+                  const rutaEdad = `protagonistas.${pIndex}.acompanantes.${aIndex}.edad` as const;
+
+                  if (fechaSeleccionada) {
+                    const edadCalculada = calcularEdad(fechaSeleccionada);
+                    setValue(
+                      rutaEdad, 
+                      edadCalculada.toString(), 
+                      { shouldValidate: true, shouldDirty: true }
+                    );
+                  } else {
+                    setValue(
+                      rutaEdad, 
+                      '', 
+                      { shouldValidate: true, shouldDirty: true }
+                    );
+                  }
+                }}
                 allowClear
               />
             )}
           />
-          <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.edad`} label="Edad" keyboardType="numeric" />
+          <ControlledInput editable={false} control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.edad`} label="Edad" keyboardType="numeric" />
 
           <BooleanField control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.usoCinturonCasco`} label="¿Uso cinturón/casco?" />
           <BooleanField control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.dispositivoRetencion`} label="¿Dispositivo de retención?" />
@@ -135,6 +160,7 @@ const ControlledInput = ({
   keyboardType,
   placeholder,
   multiline,
+  editable,
 }: {
   control: any;
   name: string;
@@ -142,6 +168,7 @@ const ControlledInput = ({
   keyboardType?: 'default' | 'numeric';
   placeholder?: string;
   multiline?: boolean;
+  editable?: boolean
 }) => (
   <Controller
     control={control}
@@ -157,6 +184,7 @@ const ControlledInput = ({
           placeholder={placeholder}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
+          editable={editable}
         />
       </View>
     )}

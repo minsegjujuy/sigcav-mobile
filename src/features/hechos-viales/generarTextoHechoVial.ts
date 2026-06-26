@@ -1,3 +1,4 @@
+import { formatearFechaA_DDMMYYYY } from "../../utils/formatearFecha";
 import { HechoVialListDto, Protagonista } from "./types";
 
 const siNo = (valor?: boolean): string =>
@@ -33,7 +34,7 @@ LUZ ARTIFICIAL: ${hecho.luzArtificial}
 SEMÁFORO: ${hecho.semaforo}
 
 TIPO SINIESTRO: ${hecho.tipoSiniestro}
-TIPO COLISIÓN: ${hecho.tipoColision}
+TIPO COLISIÓN: ${hecho.tipoColision || '-'}
 
 POSIBLES CAUSAS:
 ${hecho.posiblesCausas.join(' - ')}
@@ -67,6 +68,7 @@ DNI: ${p.conductorDni}
 Nacionalidad: ${p.conductorNacionalidad}
 Edad: ${p.conductorEdad}
 Licencia: ${p.licenciaNro} (${p.licenciaClase}) - ${p.licenciaEstado}
+Fecha de nacimiento: ${formatearFechaA_DDMMYYYY(p.conductorFechaNacimiento)}
 
 Traslado: ${p.trasladoConductor}
 Alcohol: ${p.graduacionAlcoholica}
@@ -83,9 +85,11 @@ ${p.actaRef && p.articuladoRef
 ${i + 1}º Acompañante
 Nombre: ${a.nombre}
 Documento: ${a.tipo} ${a.numeroDocumento}
+Fecha de nacimiento : ${formatearFechaA_DDMMYYYY(a.fechaNacimiento)}
 Edad: ${a.edad}
 Cinturón/Casco: ${siNo(a.usoCinturonCasco)}
 Traslado: ${a.trasladado}
+
 `;
       });
     }

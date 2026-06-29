@@ -15,7 +15,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "x"
+        "EXPO_PUBLIC_API_URL": "https://aaa3-181-87-209-196.ngrok-free.app"
       }
     }
   }

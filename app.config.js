@@ -51,7 +51,7 @@ const config  = {
       "eas": {
         "projectId": "83149d58-c3f3-4b11-aa32-5a8270cfb2ef"
       },
-      EXPO_PUBLIC_API_URL: "x"
+      EXPO_PUBLIC_API_URL: "https://aaa3-181-87-209-196.ngrok-free.app"
     }
   }
 }

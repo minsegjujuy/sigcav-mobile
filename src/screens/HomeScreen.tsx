@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
 import { Navbar, type NavbarTabKey } from '../components/Navbar';
 import { MisActasScreen } from './MisActasScreen';
@@ -23,6 +23,17 @@ export function HomeScreen() {
 
   const fade = useRef(new Animated.Value(1)).current;
 
+  const confirmLeaveActa = (onConfirm: () => void) => {
+    Alert.alert('Confirmación', '¿seguro que deseas salir del formulario?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Salir',
+        style: 'destructive',
+        onPress: onConfirm,
+      },
+    ]);
+  };
+
   useEffect(() => {
     //printTest();
     fade.setValue(0);
@@ -34,31 +45,47 @@ export function HomeScreen() {
   }, [fade, tab]);
 
   const handleChangeTab = (nextTab: NavbarTabKey) => {
-  setTab(nextTab);
+    if (tab === 'nueva_acta') {
+      confirmLeaveActa(() => {
+        setTab(nextTab);
 
-  if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
-    setActiveGroup('actas');
-  } else if (
-    nextTab === 'mis_hechos_viales' ||
-    nextTab === 'nuevo_hecho_vial'
-  ) {
-    setActiveGroup('hechos_viales');
-  } else if (nextTab === 'configuracion' || nextTab === '2FA') {
-    setActiveGroup('configuracion');
-  }
-};
+        if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
+          setActiveGroup('actas');
+        } else if (nextTab === 'mis_hechos_viales' || nextTab === 'nuevo_hecho_vial') {
+          setActiveGroup('hechos_viales');
+        } else if (nextTab === 'configuracion' || nextTab === '2FA') {
+          setActiveGroup('configuracion');
+        }
+      });
+      return;
+    }
+
+    setTab(nextTab);
+
+    if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
+      setActiveGroup('actas');
+    } else if (nextTab === 'mis_hechos_viales' || nextTab === 'nuevo_hecho_vial') {
+      setActiveGroup('hechos_viales');
+    } else if (nextTab === 'configuracion' || nextTab === '2FA') {
+      setActiveGroup('configuracion');
+    }
+  };
 
   const handleChangeGroup = (group: NavbarGroupKey) => {
-  setActiveGroup(group);
+    const nextTab =
+      group === 'actas' ? 'mis_actas' : group === 'hechos_viales' ? 'mis_hechos_viales' : 'configuracion';
 
-  if (group === 'actas') {
-    setTab('mis_actas');
-  } else if (group === 'hechos_viales') {
-    setTab('mis_hechos_viales');
-  } else {
-    setTab('configuracion');
-  }
-};
+    if (tab === 'nueva_acta') {
+      confirmLeaveActa(() => {
+        setActiveGroup(group);
+        setTab(nextTab);
+      });
+      return;
+    }
+
+    setActiveGroup(group);
+    setTab(nextTab);
+  };
 
   const content = useMemo(() => {
     switch (tab) {

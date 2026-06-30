@@ -31,6 +31,7 @@ export function mapHechoVialListDtoToForm(
     zona: dto.zona,
     tipoVia: dto.tipoVia,
     tipoViaOtro: dto.tipoViaOtro,
+    comisaria: dto.comisaria,
 
     involucrados: dto.involucrados.map((inv) => {
       // Ej: "2 AUTOMOVIL"
@@ -55,7 +56,8 @@ export function mapHechoVialListDtoToForm(
     posiblesCausas: dto.posiblesCausas,
     sintesis: dto.sintesis,
     protagonistas: dto.protagonistas,
-    unidades: dto.unidades
+    unidades: dto.unidades,
+    peatones: dto.peatones ?? [],
     /*protagonistas: dto.protagonistas.map((p) => ({
       ...p,
       asegurado: Boolean(p.asegurado),

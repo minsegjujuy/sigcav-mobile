@@ -75,6 +75,8 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setVal
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.numeroDocumento`} label="Nro" keyboardType="numeric" />
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.nacionalidad`} label="Nacionalidad" items={NACIONALIDADES} />
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.provincia`} label="Provincia" items={PROVINCIAS} />
+          <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.localidad`} label="Localidad" />
+          <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.domicilio`} label="Domicilio" />
           <Controller
             control={control}
             name={`protagonistas.${pIndex}.acompanantes.${aIndex}.fechaNacimiento`}
@@ -142,6 +144,8 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setVal
             numeroDocumento: '',
             fechaNacimiento: '',
             edad: '',
+            localidad: '',
+            domicilio: '',
             usoCinturonCasco: false,
             dispositivoRetencion: false,
             trasladado: '',

@@ -84,10 +84,10 @@ export const ProtagonistaDetalle = ({ protagonista, nro }: ProtagonistaProps) =>
           <Label label="Edad" value={protagonista.conductorEdad} />
         </View>
         <View style={styles.col6}>
-          <Label label="Licencia" value={protagonista.licenciaNro} />
+          <Label label="Licencia" value={protagonista.licenciaRequest?.numero ?? ''} />
         </View>
         <View style={styles.col6}>
-          <Label label="Clase" value={protagonista.licenciaClase} />
+          <Label label="Clase" value={protagonista.licenciaRequest?.clase ?? ''} />
         </View>
         <View style={styles.col6}>
           <Label label="Estado" value={protagonista.licenciaEstado} />
@@ -105,10 +105,19 @@ export const ProtagonistaDetalle = ({ protagonista, nro }: ProtagonistaProps) =>
           <Label label="Alcohol" value={protagonista.graduacionAlcoholica} />
         </View>
         <View style={styles.col6}>
-          <Label label="Acta" value={protagonista.actaRef} />
+          <Label
+            label="Actas"
+            value={
+              protagonista.actasNoCargadas?.length
+                ? protagonista.actasNoCargadas
+                    .map((acta) => `${acta.nroActa} (${acta.articulado})`)
+                    .join(' | ')
+                : ''
+            }
+          />
         </View>
         <View style={styles.col6}>
-          <Label label="Articulado" value={protagonista.articuladoRef} />
+          <Label label="Articulado" value="" />
         </View>
       </View>
 

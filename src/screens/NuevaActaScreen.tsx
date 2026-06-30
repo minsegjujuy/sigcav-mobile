@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { ActaRequest, TestigoRequest } from '../features/actas/types';
+import type { ActaRequest, InfractorSolicitud, TestigoRequest } from '../features/actas/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthContext';
 import { getGrupos } from '../services/GrupoService';
@@ -44,9 +44,84 @@ import { Section } from '../components/ui/Section';
 import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
 import { TIPOS_INVOLUCRADOS } from './HechosVialesScreen';
 import { DateFieldString } from '../components/ui/SelectedFieldString';
+import { Divider } from 'react-native-paper';
+import { PickerField } from '../components/forms/PickerField';
 
 type ActaFormTabKey = 'acta' | 'infractor' | 'vehiculo' | 'firma';
 type DatePickerTarget = 'acta_fecha' | 'infractor_nacimiento' | 'licencia_expedicion' | 'licencia_vencimiento';
+
+function createBlankTestigo(): TestigoRequest {
+  return { nombre: '', apellido: '', dni: '', domicilio: '' };
+}
+
+function createBlankLicencia(): NonNullable<InfractorSolicitud['licencia']> {
+  return {
+    id: undefined,
+    clase: '',
+    numero: '',
+    autoridadExpedicion: '',
+    fechaExpedicion: '',
+    fechaVencimiento: '',
+  };
+}
+
+function createInitialActaForm(): ActaRequest {
+  return {
+    idActa: undefined,
+    idGrupo: 0,
+    idTipo: 0,
+    idPuesto: undefined,
+    fecha: '',
+    motivo: '',
+    nro: '',
+    articulos: [],
+    infractor: {
+      idInfrac: null,
+      nombre: '',
+      apellido: '',
+      dni: '',
+      nacionalidad: '',
+      domicilio: '',
+      fechaNacimiento: '',
+      localidad: '',
+      provincia: '',
+      licencia: createBlankLicencia(),
+      propietario: false,
+    },
+    vehiculo: {
+      idVeh: undefined,
+      marca: '',
+      modelo: '',
+      dominio: '',
+      motor: '',
+      cuadro: '',
+      tipoRodado: '',
+      propietario: null,
+    },
+    adjunta: '',
+    retencion: '',
+    retencionVehiculo: false,
+    graduacionAlcoholica: 0,
+    infractorFugado: false,
+    juzgado: undefined,
+    ubicacionRequest: {
+      lat: 0,
+      lng: 0,
+      departamento: '',
+      unidadRegional: undefined,
+      localidad: undefined,
+      descripcion: '',
+    },
+    testigos: [createBlankTestigo(), createBlankTestigo()],
+  };
+}
+
+function normalizeTestigos(testigos: TestigoRequest[]): [TestigoRequest, TestigoRequest] {
+  return [
+    { ...createBlankTestigo(), ...(testigos[0] ?? {}) },
+    { ...createBlankTestigo(), ...(testigos[1] ?? {}) },
+  ];
+}
 
 export function NuevaActaScreen({
   editActa,
@@ -65,6 +140,8 @@ export function NuevaActaScreen({
     () => `${Platform.OS}-${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`
   );
 
+  const [formData, setFormData] = useState<ActaRequest>(() => createInitialActaForm());
+
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [tipos, setTipos] = useState<Tipo[]>([{descripcion:'SERIE B', detalle:'SERIE B', idTipo: 2}]);
   const [puestos, setPuestos] = useState<Puesto[]>([]);
@@ -78,88 +155,345 @@ export function NuevaActaScreen({
   const [isLoadingArticulos, setIsLoadingArticulos] = useState(false);
   const [articulosError, setArticulosError] = useState<string | null>(null);
 
-  const [idGrupo, setIdGrupo] = useState<number | null>(null);
-  const [idTipo, setIdTipo] = useState<number | null>(null);
-  const [idPuesto, setIdPuesto] = useState<number | null>(null);
-  const [idActa, setIdActa] = useState<number | null>(null);
-  const [idLey, setIdLey] = useState<number | null>(null);
-  const [fecha, setFecha] = useState('');
-  const [motivo, setMotivo] = useState<string | null>(null);
-  const [nro, setNro] = useState('');
-  const [articulosSeleccionados, setArticulosSeleccionados] = useState<number[]>([]);
+  const idGrupo = formData.idGrupo || null;
+  const setIdGrupo = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, idGrupo: value ?? 0 }));
+  };
 
-  const [infractorNombre, setInfractorNombre] = useState('');
-  const [infractorApellido, setInfractorApellido] = useState('');
-  const [infractorDni, setInfractorDni] = useState('');
-  const [infractorNacionalidad, setInfractorNacionalidad] = useState('');
-  const [infractorDomicilio, setInfractorDomicilio] = useState('');
-  const [infractorLocalidad, setInfractorLocalidad] = useState('');
-  const [infractorProvincia, setInfractorProvincia] = useState('');
-  const [infractorPropietario, setInfractorPropietario] = useState(false);
-  const [infractorFechaNacimiento, setInfractorFechaNacimiento] = useState('');
-  const [infractorIdInfrac, setInfractorIdInfrac] = useState<number | null>(null);
-  const [licenciaId, setLicenciaId] = useState<number | null>(null);
+  const idTipo = formData.idTipo || null;
+  const setIdTipo = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, idTipo: value ?? 0 }));
+  };
+
+  const idPuesto = formData.idPuesto ?? null;
+  const setIdPuesto = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, idPuesto: value ?? undefined }));
+  };
+
+  const idActa = formData.idActa ?? null;
+  const setIdActa = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, idActa: value ?? undefined }));
+  };
+
+  const [idLey, setIdLey] = useState<number | null>(null);
+  const fecha = formData.fecha;
+  const setFecha = (value: string) => {
+    setFormData((prev) => ({ ...prev, fecha: value }));
+  };
+
+  const motivo = formData.motivo || null;
+  const setMotivo = (value: string | null) => {
+    setFormData((prev) => ({ ...prev, motivo: value ?? '' }));
+  };
+
+  const nro = formData.nro;
+  const setNro = (value: string) => {
+    setFormData((prev) => ({ ...prev, nro: value }));
+  };
+
+  const articulosSeleccionados = formData.articulos;
+  const setArticulosSeleccionados = (values: number[]) => {
+    setFormData((prev) => ({ ...prev, articulos: values }));
+  };
+
+  const infractorNombre = formData.infractor.nombre;
+  const setInfractorNombre = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, nombre: value } }));
+  };
+
+  const infractorApellido = formData.infractor.apellido;
+  const setInfractorApellido = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, apellido: value } }));
+  };
+
+  const infractorDni = formData.infractor.dni;
+  const setInfractorDni = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, dni: value } }));
+  };
+
+  const infractorNacionalidad = formData.infractor.nacionalidad;
+  const setInfractorNacionalidad = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, nacionalidad: value } }));
+  };
+
+  const infractorDomicilio = formData.infractor.domicilio;
+  const setInfractorDomicilio = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, domicilio: value } }));
+  };
+
+  const infractorLocalidad = formData.infractor.localidad || '';
+  const setInfractorLocalidad = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, localidad: value } }));
+  };
+
+  const infractorProvincia = formData.infractor.provincia;
+  const setInfractorProvincia = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, provincia: value } }));
+  };
+
+  const infractorPropietario = formData.infractor.propietario;
+  const setInfractorPropietario = (value: boolean) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, propietario: value } }));
+  };
+
+  const infractorFechaNacimiento = formData.infractor.fechaNacimiento || '';
+  const setInfractorFechaNacimiento = (value: string) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, fechaNacimiento: value } }));
+  };
+
+  const infractorIdInfrac = formData.infractor.idInfrac ?? null;
+  const setInfractorIdInfrac = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, idInfrac: value } }));
+  };
+
+  const licenciaForm = formData.infractor.licencia ?? createBlankLicencia();
+
+  const licenciaId = licenciaForm.id ?? null;
+  const setLicenciaId = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: { ...(prev.infractor.licencia ?? createBlankLicencia()), id: value ?? undefined },
+      },
+    }));
+  };
+
   const [isSearchingInfractor, setIsSearchingInfractor] = useState(false);
   const [infractorSearchMessage, setInfractorSearchMessage] = useState<string | null>(null);
-  const [licenciaClase, setLicenciaClase] = useState('');
-  const [licenciaNumero, setLicenciaNumero] = useState('');
-  const [licenciaAutoridadExpedicion, setLicenciaAutoridadExpedicion] = useState('');
-  const [licenciaFechaExpedicion, setLicenciaFechaExpedicion] = useState('');
-  const [licenciaFechaVencimiento, setLicenciaFechaVencimiento] = useState('');
+  const licenciaClase = licenciaForm.clase || '';
+  const setLicenciaClase = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: { ...(prev.infractor.licencia ?? createBlankLicencia()), clase: value },
+      },
+    }));
+  };
 
-  const [vehiculoDominio, setVehiculoDominio] = useState('');
-  const [vehiculoMarca, setVehiculoMarca] = useState('');
-  const [vehiculoModelo, setVehiculoModelo] = useState('');
-  const [vehiculoTipoRodado, setVehiculoTipoRodado] = useState<string>('');
-  const [vehiculoIdVeh, setVehiculoIdVeh] = useState<number | null>(null);
+  const licenciaNumero = licenciaForm.numero || '';
+  const setLicenciaNumero = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: { ...(prev.infractor.licencia ?? createBlankLicencia()), numero: value },
+      },
+    }));
+  };
+
+  const licenciaAutoridadExpedicion = licenciaForm.autoridadExpedicion || '';
+  const setLicenciaAutoridadExpedicion = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: { ...(prev.infractor.licencia ?? createBlankLicencia()), autoridadExpedicion: value },
+      },
+    }));
+  };
+
+  const licenciaFechaExpedicion = licenciaForm.fechaExpedicion || '';
+  const setLicenciaFechaExpedicion = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: { ...(prev.infractor.licencia ?? createBlankLicencia()), fechaExpedicion: value },
+      },
+    }));
+  };
+
+  const licenciaFechaVencimiento = licenciaForm.fechaVencimiento || '';
+  const setLicenciaFechaVencimiento = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: { ...(prev.infractor.licencia ?? createBlankLicencia()), fechaVencimiento: value },
+      },
+    }));
+  };
+
+  const vehiculoDominio = formData.vehiculo.dominio;
+  const setVehiculoDominio = (value: string) => {
+    setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, dominio: value } }));
+  };
+
+  const vehiculoMarca = formData.vehiculo.marca || '';
+  const setVehiculoMarca = (value: string) => {
+    setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, marca: value } }));
+  };
+
+  const vehiculoModelo = formData.vehiculo.modelo || '';
+  const setVehiculoModelo = (value: string) => {
+    setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, modelo: value } }));
+  };
+
+  const vehiculoTipoRodado = formData.vehiculo.tipoRodado || '';
+  const setVehiculoTipoRodado = (value: string) => {
+    setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, tipoRodado: value } }));
+  };
+
+  const vehiculoIdVeh = formData.vehiculo.idVeh ?? null;
+  const setVehiculoIdVeh = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, idVeh: value ?? undefined } }));
+  };
+
   const [vehiculosEncontrados, setVehiculosEncontrados] = useState<VehiculoBackend[]>([]);
   const [vehiculoSeleccionadoId, setVehiculoSeleccionadoId] = useState<number | null>(null);
-  const [propietarioNombre, setPropietarioNombre] = useState('');
-  const [propietarioApellido, setPropietarioApellido] = useState('');
-  const [propietarioDni, setPropietarioDni] = useState('');
-  const [propietarioDireccion, setPropietarioDireccion] = useState('');
+  const propietarioNombre = formData.vehiculo.propietario?.nombre || '';
+  const setPropietarioNombre = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), nombre: value },
+      },
+    }));
+  };
 
-  const [ubicLat, setUbicLat] = useState('');
-  const [ubicLng, setUbicLng] = useState('');
-  const [ubicDepartamento, setUbicDepartamento] = useState('');
-  const [ubicDescripcion, setUbicDescripcion] = useState('');
+  const propietarioApellido = formData.vehiculo.propietario?.apellido || '';
+  const setPropietarioApellido = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), apellido: value },
+      },
+    }));
+  };
+
+  const propietarioDni = formData.vehiculo.propietario?.dni || '';
+  const setPropietarioDni = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), dni: value },
+      },
+    }));
+  };
+
+  const propietarioDireccion = formData.vehiculo.propietario?.direccion || '';
+  const setPropietarioDireccion = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), direccion: value },
+      },
+    }));
+  };
+
+  const ubicLat = String(formData.ubicacionRequest.lat || '');
+  const setUbicLat = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      ubicacionRequest: { ...prev.ubicacionRequest, lat: Number(value) || 0 },
+    }));
+  };
+
+  const ubicLng = String(formData.ubicacionRequest.lng || '');
+  const setUbicLng = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      ubicacionRequest: { ...prev.ubicacionRequest, lng: Number(value) || 0 },
+    }));
+  };
+
+  const ubicDepartamento = formData.ubicacionRequest.departamento;
+  const setUbicDepartamento = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      ubicacionRequest: { ...prev.ubicacionRequest, departamento: value },
+    }));
+  };
+
+  const ubicDescripcion = formData.ubicacionRequest.descripcion;
+  const setUbicDescripcion = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      ubicacionRequest: { ...prev.ubicacionRequest, descripcion: value },
+    }));
+  };
+
   const [ubicacionError, setUbicacionError] = useState<string | null>(null);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [unidadesRegionales, setUnidadesRegionales] = useState<UnidadRegional[]>([]);
   const [localidades, setLocalidades] = useState<Localidad[]>([]);
-  const [ubicUnidadRegional, setUbicUnidadRegional] = useState<number | null>(null);
-  const [ubicLocalidad, setUbicLocalidad] = useState<number | null>(null);
+  const ubicUnidadRegional = formData.ubicacionRequest.unidadRegional ?? null;
+  const setUbicUnidadRegional = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      ubicacionRequest: { ...prev.ubicacionRequest, unidadRegional: value ?? undefined },
+    }));
+  };
+
+  const ubicLocalidad = formData.ubicacionRequest.localidad ?? null;
+  const setUbicLocalidad = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      ubicacionRequest: { ...prev.ubicacionRequest, localidad: value ?? undefined },
+    }));
+  };
+
   const [isLoadingUr, setIsLoadingUr] = useState(false);
   const [urError, setUrError] = useState<string | null>(null);
 
-  const [adjuntaSeleccionadas, setAdjuntaSeleccionadas] = useState<string[]>([]);
-  const [retencion, setRetencion] = useState('');
-  const [retencionVehiculo, setRetencionVehiculo] = useState(false);
-  const [graduacionAlcoholica, setGraduacionAlcoholica] = useState('');
-  const [infractorFugado, setInfractorFugado] = useState(false);
-  const [juzgadoId, setJuzgadoId] = useState<number | null>(null);
+  const adjuntaSeleccionadas = useMemo(
+    () => (formData.adjunta ? formData.adjunta.split(',').map((item) => item.trim()).filter(Boolean) : []),
+    [formData.adjunta]
+  );
+  const setAdjuntaSeleccionadas = (values: string[]) => {
+    setFormData((prev) => ({ ...prev, adjunta: values.join(',') }));
+  };
+
+  const retencion = formData.retencion;
+  const setRetencion = (value: string) => {
+    setFormData((prev) => ({ ...prev, retencion: value }));
+  };
+
+  const retencionVehiculo = formData.retencionVehiculo;
+  const setRetencionVehiculo = (value: boolean) => {
+    setFormData((prev) => ({ ...prev, retencionVehiculo: value }));
+  };
+
+  const graduacionAlcoholica = String(formData.graduacionAlcoholica || '');
+  const setGraduacionAlcoholica = (value: string) => {
+    const parsed = Number(value.replace(',', '.'));
+    setFormData((prev) => ({ ...prev, graduacionAlcoholica: Number.isFinite(parsed) ? parsed : 0 }));
+  };
+
+  const infractorFugado = formData.infractorFugado;
+  const setInfractorFugado = (value: boolean) => {
+    setFormData((prev) => ({ ...prev, infractorFugado: value }));
+  };
+
+  const juzgadoId = formData.juzgado ?? null;
+  const setJuzgadoId = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, juzgado: value ?? undefined }));
+  };
+
   const [licencias, setLicencias] = useState<Licencia[]>([]);
 
   const skipClearArticulosOnLeyChangeRef = useRef(false);
   const pendingInferLeyArticulosRef = useRef<number[] | null>(null);
 
-  /*
-  const [firmaSeNegoAFirmar, setFirmaSeNegoAFirmar] = useState(false);
-  const [firmaInfractorBase64, setFirmaInfractorBase64] = useState<string | null>(null);
-  const [firmaOficialBase64, setFirmaOficialBase64] = useState('');
-  */
-  const [firmaTestigos, setFirmaTestigos] = useState<[TestigoRequest, TestigoRequest]>(() => [
-    { nombre: '', apellido: '', dni: '', domicilio: '' },
-    { nombre: '', apellido: '', dni: '', domicilio: '' },
-  ]);
+  const firmaTestigos = useMemo(
+    () => normalizeTestigos(formData.testigos),
+    [formData.testigos]
+  );
+  const setFirmaTestigos = (next: [TestigoRequest, TestigoRequest]) => {
+    setFormData((prev) => ({ ...prev, testigos: next }));
+  };
 
   function updateFirmaTestigo(index: 0 | 1, patch: Partial<TestigoRequest>) {
-    setFirmaTestigos((prev) => {
-      const next: [TestigoRequest, TestigoRequest] = [{ ...prev[0] }, { ...prev[1] }];
-      next[index] = { ...next[index], ...patch };
-      return next;
-    });
+    const next: [TestigoRequest, TestigoRequest] = [{ ...firmaTestigos[0] }, { ...firmaTestigos[1] }];
+    next[index] = { ...next[index], ...patch };
+    setFirmaTestigos(next);
   }
 
   function openDatePicker(target: DatePickerTarget, mode: 'date' | 'datetime', currentText: string) {
@@ -782,6 +1116,9 @@ export function NuevaActaScreen({
     setJuzgadoId(typeof juzgadoRaw === 'number' && juzgadoRaw > 0 ? juzgadoRaw : null);
 
     const inf = editActa.infractor;
+    const veh = editActa.vehiculo;
+    const prop = veh?.propietario ?? null;
+    const ub = editActa.ubicacionRequest;
     setInfractorIdInfrac(inf?.idInfrac ?? null);
     setInfractorNombre(inf?.nombre ?? '');
     setInfractorApellido(inf?.apellido ?? '');
@@ -791,7 +1128,8 @@ export function NuevaActaScreen({
     setInfractorLocalidad(inf?.localidad ?? '');
     setInfractorProvincia(inf?.provincia ?? '');
     setInfractorFechaNacimiento(inf?.fechaNacimiento ?? '');
-    setInfractorPropietario(inf?.propietario);
+    setInfractorPropietario(!prop);
+
     setLicenciaId(inf.licencia?.id ?? null);
     setLicenciaClase(inf.licencia?.clase ?? '');
     setLicenciaNumero(inf.licencia?.numero ?? '');
@@ -799,8 +1137,7 @@ export function NuevaActaScreen({
     setLicenciaFechaExpedicion(isoToDdMmYyyy(inf.licencia?.fechaExpedicion) ?? (inf.licencia?.fechaExpedicion ?? ''));
     setLicenciaFechaVencimiento(isoToDdMmYyyy(inf.licencia?.fechaVencimiento) ?? (inf.licencia?.fechaVencimiento ?? ''));
     //setInfractorPropietario(inf.pr);
-
-    const veh = editActa.vehiculo;
+    
     setVehiculosEncontrados([]);
     setVehiculoSeleccionadoId(null);
     setVehiculoIdVeh(veh?.idVeh ?? null);
@@ -809,19 +1146,23 @@ export function NuevaActaScreen({
     setVehiculoModelo((veh?.modelo ?? '') as any);
     setVehiculoTipoRodado(veh?.tipoRodado ?? '');
 
-    const prop = veh?.propietario ?? null;
     setPropietarioNombre(prop?.nombre ?? '');
     setPropietarioApellido(prop?.apellido ?? '');
     setPropietarioDni(prop?.dni ?? '');
     setPropietarioDireccion(prop?.direccion ?? '');
+    setFormData((prevData) => ({
+      ...prevData,
+      testigos: editActa.testigos ?? [],
+    }));
 
-    const ub = editActa.ubicacionRequest;
     setUbicLat(ub?.lat != null ? String(ub.lat) : '');
     setUbicLng(ub?.lng != null ? String(ub.lng) : '');
     setUbicDepartamento(ub?.departamento ?? '');
     setUbicUnidadRegional(ub?.unidadRegional ?? null);
     setUbicLocalidad(ub?.localidad ?? null);
     setUbicDescripcion(ub?.descripcion ?? '');
+
+    
 
     onEditActaConsumed?.();
   }, [OTRO_VEHICULO_ID, editActa, onEditActaConsumed]);
@@ -855,12 +1196,16 @@ export function NuevaActaScreen({
       setInfractorProvincia(data.provincia ?? '');
       setInfractorFechaNacimiento(isoToDdMmYyyy(data.fechaNacimiento) ?? (data.fechaNacimiento ?? ''));
 
-      setLicenciaId(data.licencia.id ?? null);
-      setLicenciaClase(data.licencia.clase ?? '');
-      setLicenciaNumero(data.licencia.numero ?? '');
-      setLicenciaAutoridadExpedicion(data.licencia.autoridadExpedicion ?? '');
-      setLicenciaFechaExpedicion(isoToDdMmYyyy(data.licencia.fechaExpedicion) ?? (data.licencia.fechaExpedicion ?? ''));
-      setLicenciaFechaVencimiento(isoToDdMmYyyy(data.licencia.fechaVencimiento) ?? (data.licencia.fechaVencimiento ?? ''));
+      setLicenciaId(data.licencia?.id ?? null);
+      setLicenciaClase(data.licencia?.clase ?? '');
+      setLicenciaNumero(data.licencia?.numero ?? '');
+      setLicenciaAutoridadExpedicion(data.licencia?.autoridadExpedicion ?? '');
+      setLicenciaFechaExpedicion(
+        isoToDdMmYyyy(data.licencia?.fechaExpedicion) ?? (data.licencia?.fechaExpedicion ?? '')
+      );
+      setLicenciaFechaVencimiento(
+        isoToDdMmYyyy(data.licencia?.fechaVencimiento) ?? (data.licencia?.fechaVencimiento ?? '')
+      );
 
       if (typeof (data as any).propietario === 'boolean') {
         setInfractorPropietario((data as any).propietario);
@@ -1006,16 +1351,16 @@ export function NuevaActaScreen({
   }, [articulosById, articulosSeleccionados]);
 
   const graduacionAlcoholicaValue = useMemo(() => {
-    if (!requiresGraduacionAlcoholica) return 0;
+    if (!requiresGraduacionAlcoholica) return graduacionAlcoholica;
     return toNumberOrFallback(graduacionAlcoholica, 0);
   }, [graduacionAlcoholica, requiresGraduacionAlcoholica]);
 
   const resetActaForm = () => {
   // Datos Generales
-  setIdActa(0);
-  setIdGrupo(0);
-  setIdTipo(0);
-  setIdPuesto(0);
+  setIdActa(null);
+  setIdGrupo(null);
+  setIdTipo(null);
+  setIdPuesto(null);
   setFecha(''); // O la fecha por defecto que uses
   setMotivo("");
   setNro("");
@@ -1025,7 +1370,7 @@ export function NuevaActaScreen({
   setInfractorNombre("");
   setInfractorApellido("");
   setInfractorDni("");
-  setInfractorIdInfrac(0);
+  setInfractorIdInfrac(null);
   setInfractorNacionalidad("");
   setInfractorDomicilio("");
   setInfractorLocalidad("");
@@ -1034,7 +1379,7 @@ export function NuevaActaScreen({
   setInfractorFechaNacimiento('');
 
   // Licencia
-  setLicenciaId(0);
+  setLicenciaId(null);
   setLicenciaClase("");
   setLicenciaNumero("");
   setLicenciaAutoridadExpedicion("");
@@ -1042,7 +1387,7 @@ export function NuevaActaScreen({
   setLicenciaFechaVencimiento('');
 
   // Vehículo
-  setVehiculoIdVeh(0);
+  setVehiculoIdVeh(null);
   setVehiculoDominio("");
   setVehiculoMarca("");
   setVehiculoModelo("");
@@ -1058,8 +1403,8 @@ export function NuevaActaScreen({
   setUbicLat('');
   setUbicLng("");
   setUbicDepartamento('');
-  setUbicUnidadRegional(0);
-  setUbicLocalidad(0);
+  setUbicUnidadRegional(null);
+  setUbicLocalidad(null);
   setUbicDescripcion('');
 
   // Otros y Firma
@@ -1080,7 +1425,6 @@ export function NuevaActaScreen({
   setJuzgadoId(null);
   //setFirmaDto('');
 };
-
   const actaDraft = useMemo(() => {
     return buildActaRequestSafe({
       idActa,
@@ -1125,7 +1469,7 @@ export function NuevaActaScreen({
       adjunta: adjuntaSeleccionadas,
       retencion,
       retencionVehiculo,
-      graduacionAlcoholica: graduacionAlcoholicaValue,
+      graduacionAlcoholica: Number(graduacionAlcoholicaValue),
       infractorFugado,
       juzgado: juzgadoId,
       testigos: testigosActa,
@@ -1181,10 +1525,6 @@ export function NuevaActaScreen({
 
   const isEditing = useMemo(() => !!(actaDraft as any)?.idActa, [actaDraft]);
 
-  useEffect(() => {
-    if (isEditing && tab === 'firma') setTab('acta');
-  }, [isEditing, tab]);
-
   const grupoOptions = useMemo(
     () => grupos.map((g) => ({ value: g.idGrupo, label: g.nombre })),
     [grupos]
@@ -1238,10 +1578,8 @@ export function NuevaActaScreen({
     const prevForLeySet = new Set(articulosSeleccionadosForLey);
     const nextForLeySet = new Set(nextForLey);
 
-    setArticulosSeleccionados((prev) => {
-      const keepOther = prev.filter((id) => articuloLeyById[id] !== idLey);
-      return [...keepOther, ...Array.from(nextForLeySet)];
-    });
+    const keepOther = articulosSeleccionados.filter((id) => articuloLeyById[id] !== idLey);
+    setArticulosSeleccionados([...keepOther, ...Array.from(nextForLeySet)]);
 
     setArticuloLeyById((prev) => {
       const next = { ...prev };
@@ -1296,7 +1634,7 @@ export function NuevaActaScreen({
       >
       <Text style={styles.title}>NUEVA ACTA</Text>
 
-      <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={isEditing || !infractorFugado} />
+      <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={!infractorFugado} />
 
       <View style={{ gap: 8 }}>
         <AppButton
@@ -1315,7 +1653,7 @@ export function NuevaActaScreen({
 
       {infractorFugado ? (
         <Text style={styles.helperText}>
-          Infractor fugado activo: en la pestaña de firma solo se cargarán los dos testigos. No se puede editar una vez cargado.
+          Infractor fugado activo: en la pestaña de firma solo se cargarán los dos testigos.
         </Text>
       ) : null}
 
@@ -1550,89 +1888,85 @@ export function NuevaActaScreen({
                 ) : null}
               </>
             )}
-            {adjuntaSeleccionadas.some(item => item.includes('LICENCIA')) && (
-              <>
-                {licencias.length ? (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.label}>Licencias registradas</Text>
-                  {licencias.map((l) => {
-                    const isSelected = l.id === licenciaId;
-                    const clase = (l.clase ?? '').trim();
-                    const numero = (l.numero ?? '').trim();
-                    const autoridad = (l.autoridadExpedicion ?? '').trim();
-                    const vto = (l.fechaVencimiento ?? '').trim();
-                    const label = numero
-                      ? `${numero} - ${clase} - ${autoridad} - Vto. ${convertYyyyMmDdToDdMmYyyy(vto)}`
-                      : `Licencia #${l.id}`;
-
-                    return (
-                      <Pressable
-                        key={l.id}
-                        onPress={() => {
-                          setLicenciaId(l.id!);
-                          setLicenciaAutoridadExpedicion(l.autoridadExpedicion!)
-                          setLicenciaClase(l.clase!)
-                          setLicenciaFechaExpedicion(convertYyyyMmDdToDdMmYyyy(l.fechaExpedicion!)!)
-                          setLicenciaFechaVencimiento(convertYyyyMmDdToDdMmYyyy(l.fechaVencimiento)!)
-                          setLicenciaNumero(l.numero)
-                        }}
-                        style={[styles.optionRow, isSelected ? styles.optionRowActive : null]}
-                      >
-                        <Text style={styles.optionText}>{isSelected ? `(x) ${label}` : `( ) ${label}`}</Text>
-                      </Pressable>
-                    );
-                  })}
-                  <Pressable
-                    onPress={() => {
-                      setLicenciaId(OTRA_LICENCIA_ID);
-                      setLicenciaAutoridadExpedicion('')
-                      setLicenciaClase('')
-                      setLicenciaFechaExpedicion('')
-                      setLicenciaFechaVencimiento('')
-                      setLicenciaNumero('')
-                    }}
-                    style={[styles.optionRow, licenciaId === OTRA_LICENCIA_ID ? styles.optionRowActive : null]}
-                  >
-                    <Text style={styles.optionText}>
-                      {licenciaId === OTRA_LICENCIA_ID
-                        ? '(x) Otro (Licencia nueva)'
-                        : '( ) Otro (Licencia nueva)'}
-                    </Text>
-                  </Pressable>
-                  {!licenciaId || licenciaId === OTRA_LICENCIA_ID ? (
-                    <Text style={styles.helperText}>
-                      Seleccioná una licencia para autocompletar o completá los datos manualmente.
-                    </Text>
-                  ) : null}
-                </View>
-              ) : (
-                <Text style={styles.helperText}>No hay licencias cargadas para este infractor.</Text>
-              )}
-                <Field label="clase (opcional)" value={licenciaClase} onChangeText={setLicenciaClase} />
-                <Field label="numero (opcional)" value={licenciaNumero} onChangeText={setLicenciaNumero} />
-                <Field
-                  label="autoridadExpedicion (opcional)"
-                  value={licenciaAutoridadExpedicion}
-                  onChangeText={setLicenciaAutoridadExpedicion}
-                />
-                <PickerField
-                  label="fechaExpedicion"
-                  valueText={licenciaFechaExpedicion}
-                  placeholder="Selecciona una fecha"
-                  onPress={() => openDatePicker('licencia_expedicion', 'date', licenciaFechaExpedicion)}
-                />
-                <PickerField
-                  label="fechaVencimiento"
-                  valueText={licenciaFechaVencimiento}
-                  placeholder="Selecciona una fecha"
-                  onPress={() => openDatePicker('licencia_vencimiento', 'date', licenciaFechaVencimiento)}
-                />
-              </>
-            )}
             
-          </View>
+            <>
+              {licencias.length ? (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.label}>Licencias registradas</Text>
+                {licencias.map((l) => {
+                  const isSelected = l.id === licenciaId;
+                  const clase = (l.clase ?? '').trim();
+                  const numero = (l.numero ?? '').trim();
+                  const autoridad = (l.autoridadExpedicion ?? '').trim();
+                  const vto = (l.fechaVencimiento ?? '').trim();
+                  const label = numero
+                    ? `${numero} - ${clase} - ${autoridad} - Vto. ${convertYyyyMmDdToDdMmYyyy(vto)}`
+                    : `Licencia #${l.id}`;
 
-          
+                  return (
+                    <Pressable
+                      key={l.id}
+                      onPress={() => {
+                        setLicenciaId(l.id!);
+                        setLicenciaAutoridadExpedicion(l.autoridadExpedicion!)
+                        setLicenciaClase(l.clase!)
+                        setLicenciaFechaExpedicion(convertYyyyMmDdToDdMmYyyy(l.fechaExpedicion!)!)
+                        setLicenciaFechaVencimiento(convertYyyyMmDdToDdMmYyyy(l.fechaVencimiento)!)
+                        setLicenciaNumero(l.numero)
+                      }}
+                      style={[styles.optionRow, isSelected ? styles.optionRowActive : null]}
+                    >
+                      <Text style={styles.optionText}>{isSelected ? `(x) ${label}` : `( ) ${label}`}</Text>
+                    </Pressable>
+                  );
+                })}
+                <Pressable
+                  onPress={() => {
+                    setLicenciaId(OTRA_LICENCIA_ID);
+                    setLicenciaAutoridadExpedicion('')
+                    setLicenciaClase('')
+                    setLicenciaFechaExpedicion('')
+                    setLicenciaFechaVencimiento('')
+                    setLicenciaNumero('')
+                  }}
+                  style={[styles.optionRow, licenciaId === OTRA_LICENCIA_ID ? styles.optionRowActive : null]}
+                >
+                  <Text style={styles.optionText}>
+                    {licenciaId === OTRA_LICENCIA_ID
+                      ? '(x) Otro (Licencia nueva)'
+                      : '( ) Otro (Licencia nueva)'}
+                  </Text>
+                </Pressable>
+                {!licenciaId || licenciaId === OTRA_LICENCIA_ID ? (
+                  <Text style={styles.helperText}>
+                    Seleccioná una licencia para autocompletar o completá los datos manualmente.
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.helperText}>No hay licencias cargadas para este infractor.</Text>
+            )}
+              <Field label="clase (opcional)" value={licenciaClase} onChangeText={setLicenciaClase} />
+              <Field label="numero (opcional)" value={licenciaNumero} onChangeText={setLicenciaNumero} />
+              <Field
+                label="autoridadExpedicion (opcional)"
+                value={licenciaAutoridadExpedicion}
+                onChangeText={setLicenciaAutoridadExpedicion}
+              />
+              <PickerField
+                label="fechaExpedicion"
+                valueText={licenciaFechaExpedicion}
+                placeholder="Selecciona una fecha"
+                onPress={() => openDatePicker('licencia_expedicion', 'date', licenciaFechaExpedicion)}
+              />
+              <PickerField
+                label="fechaVencimiento"
+                valueText={licenciaFechaVencimiento}
+                placeholder="Selecciona una fecha"
+                onPress={() => openDatePicker('licencia_vencimiento', 'date', licenciaFechaVencimiento)}
+              />
+            </>
+          </View>
           <Field label="nombre" value={infractorNombre} onChangeText={setInfractorNombre} />
           <Field label="apellido" value={infractorApellido} onChangeText={setInfractorApellido} />
           <Field
@@ -1819,7 +2153,7 @@ export function NuevaActaScreen({
                 value={firmaTestigos[0].domicilio ?? ''}
                 onChangeText={(v) => updateFirmaTestigo(0, { domicilio: v })}
               />
-
+              <Divider />
               <Text style={styles.sectionTitle}>Testigo 2</Text>
               <Field
                 label="nombre"
@@ -2055,7 +2389,6 @@ function ActaTabs({
         isActive={tab === 'firma'}
         disabled={!!disableFirma}
         onPress={() => {
-          if (disableFirma) return;
           onChangeTab('firma');
         }}
       />
@@ -2091,38 +2424,9 @@ function TabButton({
   );
 }
 
-function PickerField({
-  label,
-  valueText,
-  placeholder,
-  onPress,
-  disabled,
-}: {
-  label: string;
-  valueText: string;
-  placeholder: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  const hasValue = !!valueText.trim();
-  return (
-    <View style={{ gap: 6 }}>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable
-        onPress={onPress}
-        disabled={disabled}
-        style={[styles.selectBox, disabled ? { opacity: 0.6 } : null]}
-      >
-        <Text style={hasValue ? styles.selectText : styles.selectPlaceholder} numberOfLines={1}>
-          {hasValue ? valueText : placeholder}
-        </Text>
-        <Text style={styles.selectChevron}>v</Text>
-      </Pressable>
-    </View>
-  );
-}
 
-function StepperRow({
+
+export function StepperRow({
   label,
   value,
   onChange,
@@ -2266,11 +2570,11 @@ function buildActaRequestSafe(input: {
   infractorPropietario: boolean;
   infractorFechaNacimiento: string;
   licenciaId: number | null;
-  licenciaClase: string;
-  licenciaNumero: string;
-  licenciaAutoridadExpedicion: string;
-  licenciaFechaExpedicion: string;
-  licenciaFechaVencimiento: string;
+  licenciaClase: string | null;
+  licenciaNumero: string | null;
+  licenciaAutoridadExpedicion: string | null;
+  licenciaFechaExpedicion: string | null;
+  licenciaFechaVencimiento: string | null;
   vehiculoIdVeh: number | null;
   vehiculoDominio: string;
   vehiculoMarca: string;
@@ -2327,14 +2631,22 @@ function buildActaRequestSafe(input: {
       localidad: input.infractorLocalidad || undefined,
       provincia: input.infractorProvincia,
       fechaNacimiento: ddMmYyyyToIso(input.infractorFechaNacimiento),
-      licencia: {
-        id: input.licenciaId || undefined,
-        autoridadExpedicion: input.licenciaAutoridadExpedicion,
-        clase: input.licenciaClase,
-        fechaExpedicion: ddMmYyyyToIso(input.licenciaFechaExpedicion),
-        fechaVencimiento: ddMmYyyyToIso(input.licenciaFechaVencimiento),
-        numero: input.licenciaNumero
-      },
+      licencia:
+        input.licenciaId ||
+        input.licenciaClase ||
+        input.licenciaNumero ||
+        input.licenciaAutoridadExpedicion ||
+        input.licenciaFechaExpedicion ||
+        input.licenciaFechaVencimiento
+          ? {
+              id: input.licenciaId || undefined,
+              autoridadExpedicion: input.licenciaAutoridadExpedicion || undefined,
+              clase: input.licenciaClase || undefined,
+              fechaExpedicion: ddMmYyyyToIso(input.licenciaFechaExpedicion),
+              fechaVencimiento: ddMmYyyyToIso(input.licenciaFechaVencimiento),
+              numero: input.licenciaNumero || undefined,
+            }
+          : null,
       propietario: input.infractorPropietario,
     },
     vehiculo: {
@@ -2583,28 +2895,6 @@ function formatNowAsDdMmYyyyHhMm(): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const min = String(d.getMinutes()).padStart(2, '0');
   return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
-}
-
-function formatDateTimeDdMmYyyyHhMm(input: string): string {
-  const digits = input.replace(/\D/g, '').slice(0, 12); // DDMMYYYYHHMM
-
-  const dd = digits.slice(0, 2);
-  const mm = digits.slice(2, 4);
-  const yyyy = digits.slice(4, 8);
-  const hh = digits.slice(8, 10);
-  const min = digits.slice(10, 12);
-
-  let datePart = '';
-  if (dd) datePart = dd;
-  if (mm) datePart = `${datePart}${datePart ? '-' : ''}${mm}`;
-  if (yyyy) datePart = `${datePart}${datePart ? '-' : ''}${yyyy}`;
-
-  let timePart = '';
-  if (hh) timePart = hh;
-  if (min) timePart = `${hh}:${min}`;
-
-  if (datePart && timePart) return `${datePart} ${timePart}`;
-  return datePart || timePart;
 }
 
 function isoToDdMmYyyy(iso: string | undefined | null): string | null {

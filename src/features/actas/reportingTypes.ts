@@ -1,4 +1,4 @@
-import type { InfractorSolicitud, VehiculoSolicitud } from './types';
+import type { InfractorSolicitud, TestigoRequest, VehiculoSolicitud } from './types';
 
 export interface ArticuloDto {
   idArt: number;
@@ -32,10 +32,12 @@ export interface ActaResumenDto {
   legajo: string;
   nombre: string;
   adjunta: string;
+  graduacionAlcoholica: number;
   ubicacionResponse: UbicacionResponse;
   retencionVehiculo: boolean;
   juzgado?: number,
   infractorFugado: boolean,
+  testigos: TestigoRequest[]
 }
 
 export interface DiasCantidad {

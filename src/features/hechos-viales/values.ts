@@ -1,0 +1,171 @@
+// ====== TIPOS AUXILIARES ======
+export type OptionNumber = { label: string; value: number };
+export type OptionString = { label: string; value: string };
+
+export const TIPOS_INVOLUCRADOS = [
+  'AUTOMOVIL',
+  'CAMIONETA',
+  'MOTOCICLETA',
+  'PEATON',
+  'BICICLETA',
+  'OMNIBUS',
+  'MOVIL POLICIAL',
+  'MOVIL SAME',
+  'MOVIL BOMBEROS',
+  'OTRO',
+];
+
+export const TIPO_VIA = [
+  'CALLE',
+  'AVENIDA',
+  'SEMIAUTOPISTA',
+  'AUTOPISTA',
+  'RUTA NACIONAL',
+  'RUTA PROVINCIAL',
+  'OTRO',
+];
+
+export const CONFIGURACION_VIA = [
+  'INTERSECCION',
+  'MITAD DE CALLE/AVENIDA',
+  'INGRESO/EGRESO DE LA VIA',
+  'RECTA',
+  'CURVA HORIZONTAL',
+  'CURVA VERTICAL',
+  'ROTONDA',
+  'DISTRIBUIDOR',
+  'BIFURCACION',
+  'PASO A NIVEL FFCC',
+  'PUENTE',
+  'VIADUCTO',
+  'TUNEL',
+  'CICLOVIA',
+  'FUERA DE CALZADA',
+];
+
+export const ESTADO_FISICO_CALZADA = [
+  'APTO',
+  'CON BACHES',
+  'AHUELLAMIENTO',
+  'EN REPARACION',
+  'OTRO',
+];
+
+export const ESTADO_CALZADA = [
+  'SECA',
+  'MOJADA',
+  'INUNDADA',
+  'CON CHARCOS',
+  'CON HIELO',
+  'CON NIEVE',
+  'OTRO',
+];
+
+export const ESTADO_AMBIENTAL = ['DESPEJADO', 'LLUVIA', 'NIEBLA', 'VIENTO', 'POLVO'];
+export const SEMAFORO = ['SI', 'NO', 'INTERMITENTE'];
+export const LUZ_ARTIFICIAL = ['SI', 'NO', 'FUNCIONA'];
+export const MATERIAL_CALZADA = ['ASFALTO', 'RIPIO', 'TIERRA', 'ADOQUIN'];
+
+export const TIPOS_SINIESTRO: OptionString[] = [
+  { label: 'COLISION ENTRE VEHICULOS', value: 'COLISION' },
+  { label: 'VUELCO', value: 'VUELCO' },
+  { label: 'DESPEÑAMIENTO', value: 'DESPEÑAMIENTO' },
+  { label: 'ATROPELLO PEATON', value: 'ATROPELLO_PEATON' },
+  { label: 'ATROPELLO ANIMAL', value: 'ATROPELLO_ANIMAL' },
+  { label: 'SALIDA DE LA CALZADA', value: 'SALIDA_DE_LA_CALZADA' },
+  { label: 'CHOQUE CONTRA OBJETO FIJO', value: 'CHOQUE_CONTRA_OBJETO_FIJO' },
+  { label: 'DESPISTE', value: 'DESPISTE' },
+  { label: 'DERRAPE', value: 'DERRAPE' },
+];
+
+export const TIPOS_COLISION = [
+  'FRONTAL',
+  'ALCANCE',
+  'LATERAL',
+  'ANGULO',
+];
+
+export const POSIBLES_CAUSAS = [
+  'EXCESO DE VELOCIDAD',
+  'MANIOBRA RIESGOSA',
+  'VIOLACION DEL SEMAFORO',
+  'NO RESPETO DE LA PRIORIDAD',
+  'GIRO A LA IZQUIERDA/DERECHA',
+  'INVASION DE CARRIL CONTRARIO',
+  'PERDIDA DE CONTROL',
+  'PRESENCIA DE ALCOHOL Y/O DROGAS',
+  'CANSANCIO/FATIGA/SUEÑO',
+  'DISTRACCION',
+  'PEATON IMPRUDENTE',
+  'FALLA EN LA VIA',
+  'FALLA EN EL VEHICULO',
+  'NO SE PUEDE DETERMINAR',
+];
+
+export const TIPO_RODADO = [
+  'AUTOMOVIL',
+  'CAMIONETA',
+  'MOTOCICLETA',
+  'BICICLETA',
+  'CAMION',
+  'CAMION CON ACOPLADO',
+  'CARGA TRACTOR',
+  'OMNIBUS',
+  'OMNIBUS URBANO',
+  'OMNIBUS A LARGA DISTANCIA / ARTICULADO',
+  'MAQUINARIA',
+  'MOVIL POLICIAL',
+  'MOVIL SAME',
+  'MOVIL BOMBEROS',
+];
+
+export const COLORES = ['ROJO', 'AZUL', 'BLANCO', 'NEGRO', 'AMARILLO', 'GRIS', 'OTRO'];
+export const GENEROS = ['M', 'F', 'X'];
+export const NACIONALIDADES = [
+  'ARGENTINA',
+  'CHILENA',
+  'BOLIVIANA',
+  'PARAGUAYA',
+  'BRASILERA',
+  'PERUANA',
+  'VENEZOLANA',
+  'OTRO'
+];
+export const PROVINCIAS = [
+  'BUENOS_AIRES',
+  'CIUDAD_AUTONOMA_DE_BUENOS_AIRES',
+  'CATAMARCA',
+  'CHACO',
+  'CHUBUT',
+  'CORDOBA',
+  'CORRIENTES',
+  'ENTRE_RIOS',
+  'FORMOSA',
+  'JUJUY',
+  'LA_PAMPA',
+  'LA_RIOJA',
+  'MENDOZA',
+  'MISIONES',
+  'NEUQUEN',
+  'RIO_NEGRO',
+  'SALTA',
+  'SAN_JUAN',
+  'SAN_LUIS',
+  'SANTA_CRUZ',
+  'SANTA_FE',
+  'SANTIAGO_DEL_ESTERO',
+  'TIERRA_DEL_FUEGO',
+  'TUCUMAN',
+  'N/A',
+];
+export const LICENCIA_CLASE = [
+  'A', 'A.1', 'A.2', 'A.2.1', 'A.2.2', 'A.3', 'A.4',
+  'B', 'B.1', 'B.2',
+  'C', 'C.1', 'C.2',
+  'D', 'D.1', 'D.2', 'D.3', 'D.4',
+  'E', 'E.1', 'E.2', 'E.3',
+  'F',
+  'G', 'G.1', 'G.2', 'G.3'
+];
+export const LICENCIA_ESTADO = ['VIGENTE', 'VENCIDA', 'NO_POSEE'];
+export const ESTADO_SALUD = ['SIN LESIONES', 'HERIDO LEVE', 'HERIDO GRAVE', 'FALLECIDO'];

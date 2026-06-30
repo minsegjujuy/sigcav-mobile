@@ -3,7 +3,7 @@ const config  = {
     "jsEngine": "hermes",
     "name": "PERSONAL DE CALLE",
     "slug": "seguridadvial_movil",
-    "version": "1.0.1",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

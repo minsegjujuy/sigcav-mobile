@@ -37,6 +37,7 @@ export const emptyHechoVial: HechoVialForm = {
   destacamento: 0,
   grupo: 0,
   hora: '',
+  comisaria: '',
   sintesis: '',
 
   ubicacionReq: {
@@ -50,6 +51,7 @@ export const emptyHechoVial: HechoVialForm = {
 
   protagonistas: [],
   unidades: [],
+  peatones: [],
 };
 
 const STORAGE_KEY = '@hecho_vial_draft';

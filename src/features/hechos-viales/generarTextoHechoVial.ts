@@ -67,13 +67,15 @@ Género: ${p.conductorGenero}
 DNI: ${p.conductorDni}
 Nacionalidad: ${p.conductorNacionalidad}
 Edad: ${p.conductorEdad}
-Licencia: ${p.licenciaNro} (${p.licenciaClase}) - ${p.licenciaEstado}
+Licencia: ${p.licenciaRequest?.numero ?? ''} (${p.licenciaRequest?.clase ?? ''}) - ${p.licenciaEstado}
 Fecha de nacimiento: ${formatearFechaA_DDMMYYYY(p.conductorFechaNacimiento)}
 
 Traslado: ${p.trasladoConductor}
 Alcohol: ${p.graduacionAlcoholica}
-${p.actaRef && p.articuladoRef 
-  ? `SE LABRÓ ACTA DE COMPROBACIÓN NRO ${p.actaRef} POR ARTICULADO ${p.articuladoRef}` 
+${p.actasNoCargadas?.length
+  ? p.actasNoCargadas
+      .map((acta) => `SE LABRÓ ACTA DE COMPROBACIÓN NRO ${acta.nroActa} POR ARTICULADO ${acta.articulado}`)
+      .join('\n')
   : ''}
 
 `;

@@ -53,7 +53,7 @@ export interface InfractorSolicitud {
   fechaNacimiento?: string;
   localidad?: string;
   provincia: string;
-  licencia: LicenciaRequest;
+  licencia: LicenciaRequest | null;
   propietario: boolean;
 }
 

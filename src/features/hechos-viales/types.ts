@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { UbicacionRequest } from "../actas/types";
+import { LicenciaRequest, UbicacionRequest } from "../actas/types";
 
 export interface PersonalInterviniente {
   id?:number;
@@ -41,7 +41,26 @@ export interface HechoVialForm {
   sintesis: string; //obligatorio
   protagonistas: Protagonista[]; //obligatorio
   unidades: UnidadInterviniente[];
+  peatones: Peaton[]
 }
+
+export interface Peaton {
+  id?: number;
+  nombre: string;
+  genero: string;
+  nacionalidad: string;
+  provincia: string;
+  domicilio: string;
+  localidad: string;
+  tipo: 'DNI' | 'LC' | 'LE' | 'CI';
+  numeroDocumento: string;
+  fechaNacimiento: string;
+  edad: string;
+  dispositivoRetencion: boolean;
+  trasladado: string;
+  estadoSalud: string;
+}
+
 
 export interface Involucrado {
   tipo: string;
@@ -55,6 +74,8 @@ export interface Acompanante {
   genero: string;
   nacionalidad: string;
   provincia: string;
+  domicilio: string;
+  localidad: string;
   tipo: 'DNI' | 'LC' | 'LE' | 'CI';
   numeroDocumento: string;
   fechaNacimiento: string;
@@ -84,11 +105,11 @@ export interface Protagonista {
   conductorNacionalidad: string;
   conductorEdad: string;
   conductorFechaNacimiento: string;
-  licenciaNro: string;
+  //licenciaNro: string;
   municipio: string;
-  licenciaTipo: string;
-  licenciaClase: string;
-  licenciaEstado: 'VIGENTE' | 'VENCIDA' | 'NO POSEE' | 'SD';
+  //licenciaTipo: string;
+  //licenciaClase: string;
+  licenciaEstado: 'VIGENTE' | 'VENCIDA' | 'NO_POSEE' | 'NO POSEE' | 'SD';
   // Personal de Seguridad (Opcional)
   esFuerzaSeguridad: boolean;
   situacion: string;
@@ -96,14 +117,20 @@ export interface Protagonista {
   legajo?: string;
   // Salud y Alcohol
   trasladoConductor: string;
-  graduacionAlcoholica: number | null; // si es null no se realizó ningun test
+  graduacionAlcoholica: number | null; // si es null no se realizÃ³ ningun test
   estadoSalud: string;
-  actaRef: string;
-  actaRetencionRef: string;
-  articuladoRef: number[];
+  //actaRef: string;
+  //actaRetencionRef: string;
+  //articuladoRef: number[];
   // Lista anidada
   acompanantes: Acompanante[];
+  licenciaRequest?: LicenciaRequest | null;
+  actasNoCargadas: ActaSalienteDetalleRequest[];
+  domicilio: string;
+  provincia: string;
+  localidad: string;
 }
+
 export interface HechoVialListDto {
   id: number;
   fecha: string;
@@ -130,7 +157,11 @@ export interface HechoVialListDto {
   puesto: string;
   unidades: UnidadInterviniente[];
   usuario: string;
+  comisaria: string;
+  destacamento: number;
+  peatones: Peaton[]
 }
+
 export interface UbicacionDto {
   lat: number;
   lng: number;
@@ -150,4 +181,13 @@ export interface HechoVialContextType {
 
 export interface HechoVialProviderProps {
   children: ReactNode;
+}
+
+export interface ActaSalienteDetalleRequest {
+    id?: number;
+    nroActa: string;
+    fechaActa: Date | string; // LocalDateTime en Java
+    articulado: string;
+    tipo: string;
+    actaId?: number; // Opcional, por si vinculas a una existente
 }

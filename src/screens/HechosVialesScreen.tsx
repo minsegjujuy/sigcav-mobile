@@ -15,6 +15,7 @@ import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { HechoVialForm, Involucrado } from '../features/hechos-viales/types';
 import type { UbicacionRequest } from '../features/actas/types';
 import { SeccionProtagonistasRN } from './SeccionProtagonista.native';
+import { SeccionPeatonRN } from './SeccionPeaton.native';
 import { styles } from '../components/ui/styles';
 import { AppButton } from '../components/ui/AppButton';
 import { DateFieldString, SelectField, SelectFieldString } from '../components/ui/SelectedFieldString';
@@ -30,10 +31,10 @@ import { obtenerUnidadesRegionalesPorDepartamento } from '../services/UnidadRegi
 import { guardarHechoVial as guardarHechoVialApi } from '../services/HechoVialService';
 import type { Grupo, Puesto } from '../features/catalog/types';
 import type { Localidad, UnidadRegional } from '../features/ubicacion/types';
+import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
+import { CONFIGURACION_VIA, ESTADO_AMBIENTAL, ESTADO_CALZADA, ESTADO_FISICO_CALZADA, LUZ_ARTIFICIAL, MATERIAL_CALZADA, OptionNumber, OptionString, POSIBLES_CAUSAS, SEMAFORO, TIPO_VIA, TIPOS_COLISION, TIPOS_INVOLUCRADOS, TIPOS_SINIESTRO } from '../features/hechos-viales/values';
 
-// ====== TIPOS AUXILIARES ======
-type OptionNumber = { label: string; value: number };
-type OptionString = { label: string; value: string };
+export { TIPOS_INVOLUCRADOS };
 
 interface Props {
   getPuestos?: () => Promise<Puesto[]>;
@@ -42,103 +43,6 @@ interface Props {
   modo?: 'create' | 'edit';
   limpiarHechoVial?: () => void;
 }
-
-export const TIPOS_INVOLUCRADOS = [
-  'AUTOMOVIL',
-  'CAMIONETA',
-  'MOTOCICLETA',
-  'PEATON',
-  'BICICLETA',
-  'OMNIBUS',
-  'OTRO',
-];
-
-const TIPO_VIA = [
-  'CALLE',
-  'AVENIDA',
-  'SEMIAUTOPISTA',
-  'AUTOPISTA',
-  'RUTA NACIONAL',
-  'RUTA PROVINCIAL',
-  'OTRO',
-];
-
-const CONFIGURACION_VIA = [
-  'INTERSECCION',
-  'MITAD DE CALLE/AVENIDA',
-  'INGRESO/EGRESO DE LA VIA',
-  'RECTA',
-  'CURVA HORIZONTAL',
-  'CURVA VERTICAL',
-  'ROTONDA',
-  'DISTRIBUIDOR',
-  'BIFURCACION',
-  'PASO A NIVEL FFCC',
-  'PUENTE',
-  'VIADUCTO',
-  'TUNEL',
-  'CICLOVIA',
-  'FUERA DE CALZADA',
-];
-
-const ESTADO_FISICO_CALZADA = [
-  'APTO',
-  'CON BACHES',
-  'AHUELLAMIENTO',
-  'EN REPARACION',
-  'OTRO',
-];
-
-const ESTADO_CALZADA = [
-  'SECA',
-  'MOJADA',
-  'INUNDADA',
-  'CON CHARCOS',
-  'CON HIELO',
-  'CON NIEVE',
-  'OTRO',
-];
-
-const ESTADO_AMBIENTAL = ['DESPEJADO', 'LLUVIA', 'NIEBLA', 'VIENTO', 'POLVO'];
-const SEMAFORO = ['SI', 'NO', 'INTERMITENTE'];
-const LUZ_ARTIFICIAL = ['SI', 'NO', 'FUNCIONA'];
-const MATERIAL_CALZADA = ['ASFALTO', 'RIPIO', 'TIERRA', 'ADOQUIN'];
-
-const TIPOS_SINIESTRO: OptionString[] = [
-  { label: 'COLISION ENTRE VEHICULOS', value: 'COLISION' },
-  { label: 'VUELCO', value: 'VUELCO' },
-  { label: 'DESPEÑAMIENTO', value: 'DESPEÑAMIENTO' },
-  { label: 'ATROPELLO PEATON', value: 'ATROPELLO_PEATON' },
-  { label: 'ATROPELLO ANIMAL', value: 'ATROPELLO_ANIMAL' },
-  { label: 'SALIDA DE LA CALZADA', value: 'SALIDA_DE_LA_CALZADA' },
-  { label: 'CHOQUE CONTRA OBJETO FIJO', value: 'CHOQUE_CONTRA_OBJETO_FIJO' },
-  { label: 'DESPISTE', value: 'DESPISTE' },
-  { label: 'DERRAPE', value: 'DERRAPE' },
-];
-
-const TIPOS_COLISION = [
-  'FRONTAL',
-  'ALCANCE',
-  'LATERAL',
-  'ANGULO',
-];
-
-const POSIBLES_CAUSAS = [
-  'EXCESO DE VELOCIDAD',
-  'MANIOBRA RIESGOSA',
-  'VIOLACION DEL SEMAFORO',
-  'NO RESPETO DE LA PRIORIDAD',
-  'GIRO A LA IZQUIERDA/DERECHA',
-  'INVASION DE CARRIL CONTRARIO',
-  'PERDIDA DE CONTROL',
-  'PRESENCIA DE ALCOHOL Y/O DROGAS',
-  'CANSANCIO/FATIGA/SUEÑO',
-  'DISTRACCION',
-  'PEATON IMPRUDENTE',
-  'FALLA EN LA VIA',
-  'FALLA EN EL VEHICULO',
-  'NO SE PUEDE DETERMINAR',
-];
 
 const defaultUbicacion: UbicacionRequest = {
   lat: 0,
@@ -174,6 +78,7 @@ const defaultValues: HechoVialForm = {
   posiblesCausas: [],
   sintesis: '',
   protagonistas: [],
+  peatones: [],
   unidades: [
     {
       unidad: '',
@@ -181,6 +86,48 @@ const defaultValues: HechoVialForm = {
     },
   ],
 };
+
+function normalizeLicenciaRequest(licencia: HechoVialForm['protagonistas'][number]['licenciaRequest']) {
+  if (!licencia) return null;
+
+  const numero = String(licencia.numero ?? '').trim();
+  const clase = String(licencia.clase ?? '').trim();
+  const autoridadExpedicion = String(licencia.autoridadExpedicion ?? '').trim();
+  const fechaExpedicion = String(licencia.fechaExpedicion ?? '').trim();
+  const fechaVencimiento = String(licencia.fechaVencimiento ?? '').trim();
+
+  if (!numero && !clase && !autoridadExpedicion && !fechaExpedicion && !fechaVencimiento) {
+    return null;
+  }
+
+  return {
+    ...licencia,
+    numero,
+    clase,
+    autoridadExpedicion,
+    fechaExpedicion,
+    fechaVencimiento,
+  };
+}
+
+function getCamposPendientesProtagonistas(protagonistas: HechoVialForm['protagonistas']): string[] {
+  return protagonistas.flatMap((protagonista, index) => {
+    const campos: string[] = [];
+
+    if (String(protagonista.dominio ?? '').trim().length === 0) campos.push('dominio');
+    if (String(protagonista.marca ?? '').trim().length === 0) campos.push('marca');
+    if (String(protagonista.modelo ?? '').trim().length === 0) campos.push('modelo');
+    if (!protagonista.licenciaRequest) campos.push('licencia de conducir');
+    if (!Array.isArray(protagonista.actasNoCargadas) || protagonista.actasNoCargadas.length === 0) {
+      campos.push('actas');
+    }
+    if (!Array.isArray(protagonista.acompanantes) || protagonista.acompanantes.length === 0) {
+      campos.push('acompañantes del conductor');
+    }
+
+    return campos.length > 0 ? [`Protagonista ${index + 1}: ${campos.join(', ')}`] : [];
+  });
+}
 
 export const HechoVialFormRN: React.FC<Props> = ({
   getPuestos: getPuestosOverride,
@@ -449,8 +396,14 @@ export const HechoVialFormRN: React.FC<Props> = ({
   }
 
   const onSubmit = async (data: HechoVialForm) => {
+      const protagonistasNormalizados = data.protagonistas.map((protagonista) => ({
+        ...protagonista,
+        licenciaRequest: normalizeLicenciaRequest(protagonista.licenciaRequest),
+      }));
+
       const payload: HechoVialForm = {
         ...data,
+        protagonistas: protagonistasNormalizados,
         ubicacionReq,
       };
       const validation = validateHechoVialForm(payload);
@@ -460,21 +413,38 @@ export const HechoVialFormRN: React.FC<Props> = ({
         return;
       }
       setFormValidationErrors([]);
-      console.log('HECHO VIAL PAYLOAD: ', payload)
-      await guardarHechoVialApi(payload, jwt);
-      Alert.alert('Éxito', 'Se guardó correctamente el hecho vial');
-      limpiarHechoVial?.();
-      reset(defaultValues);
-      setUbicLat(null);
-      setUbicLng(null);
-      setUbicDepartamento(null);
-      setUbicUnidadRegional(null);
-      setUbicLocalidad(null);
-      setUbicDescripcion('');
-      setUbicacionError(null);
-      setUrError(null);
-      setUnidadesRegionales([]);
-      setLocalidades([]);
+
+      const camposPendientes = getCamposPendientesProtagonistas(payload.protagonistas);
+      const enviarHechoVial = async () => {
+        await guardarHechoVialApi(payload, jwt);
+        SnackbarUtilities.success('Se guardó correctamente el hecho vial');
+        limpiarHechoVial?.();
+        reset(defaultValues);
+        setUbicLat(null);
+        setUbicLng(null);
+        setUbicDepartamento(null);
+        setUbicUnidadRegional(null);
+        setUbicLocalidad(null);
+        setUbicDescripcion('');
+        setUbicacionError(null);
+        setUrError(null);
+        setUnidadesRegionales([]);
+        setLocalidades([]);
+      };
+
+      if (camposPendientes.length > 0) {
+        Alert.alert(
+          'Confirmación',
+          `Usted está dejando los siguientes campos sin completar:\n\n${camposPendientes.join('\n')}`,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Continuar', onPress: () => void enviarHechoVial() },
+          ]
+        );
+        return;
+      }
+
+      await enviarHechoVial();
   };
 
   return (
@@ -801,6 +771,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
       />
 
       <SeccionProtagonistasRN control={control} watch={watch} setValue={setValue} />
+      <SeccionPeatonRN control={control} setValue={setValue} />
 
         <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit)} />
       </ScrollView>

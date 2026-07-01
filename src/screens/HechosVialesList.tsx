@@ -21,6 +21,8 @@ import { AppButton } from '../components/ui/AppButton';
 import { Field } from '../components/ui/Field';
 import { Section } from '../components/ui/Section';
 import { styles } from '../components/ui/styles';
+import { CollapsibleContainer } from '../components/ui/CollapsibleContainer';
+import { SkeletonList } from '../components/ui/skeleton/SkeletonList';
 
 // Ajustá estos imports a tu proyecto
 /*import { listarHechosViales, deleteHechoVial } from '../services/hechoVialService';
@@ -186,6 +188,7 @@ export default function HechosVialesScreen({ navigation }: { navigation?: any })
   const [soloLesionados, setSoloLesionados] = useState<boolean>(false);
 
   const [loading, setLoading] = useState(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
 
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
 
@@ -266,6 +269,7 @@ export default function HechosVialesScreen({ navigation }: { navigation?: any })
   };
 
   const handleFilter = async () => {
+    setFiltersCollapsed(true);
     setPage(0);
     try {
       setLoading(true);
@@ -308,79 +312,86 @@ export default function HechosVialesScreen({ navigation }: { navigation?: any })
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          <View style={{ gap: 14 }}>
+          <CollapsibleContainer
+            title="Filtros de hechos viales"
+            iconTitle="filter-list"
+            collapsed={filtersCollapsed}
+            onCollapsedChange={setFiltersCollapsed}
+          >
+              <View style={{ gap: 14 }}>
 
-            <Section title="Filtros">
-              <Field
-                label="Fecha inicio"
-                placeholder="YYYY-MM-DD"
-                value={fechaInicio}
-                onChangeText={setFechaInicio}
-              />
+              <Section title="Filtros">
+                <Field
+                  label="Fecha inicio"
+                  placeholder="YYYY-MM-DD"
+                  value={fechaInicio}
+                  onChangeText={setFechaInicio}
+                />
 
-              <Field
-                label="Fecha fin"
-                placeholder="YYYY-MM-DD"
-                value={fechaFin}
-                onChangeText={setFechaFin}
-              />
+                <Field
+                  label="Fecha fin"
+                  placeholder="YYYY-MM-DD"
+                  value={fechaFin}
+                  onChangeText={setFechaFin}
+                />
 
-              <SimpleSelect
-                label="Grupo"
-                value={grupoId}
-                onChange={setGrupoId}
-                options={[
-                  { label: 'Todos', value: '' },
-                  { label: 'Grupo 1', value: '1' },
-                  { label: 'Grupo 2', value: '2' },
-                  { label: 'Grupo 3', value: '3' },
-                ]}
-              />
+                <SimpleSelect
+                  label="Grupo"
+                  value={grupoId}
+                  onChange={setGrupoId}
+                  options={[
+                    { label: 'Todos', value: '' },
+                    { label: 'Grupo 1', value: '1' },
+                    { label: 'Grupo 2', value: '2' },
+                    { label: 'Grupo 3', value: '3' },
+                  ]}
+                />
 
-              <SimpleSelect
-                label="Víctima Fatal"
-                value={victimaFatal}
-                onChange={setVictimaFatal}
-                options={[
-                  { label: 'Ambos', value: '' },
-                  { label: 'Sí', value: 'SI' },
-                  { label: 'No', value: 'NO' },
-                ]}
-              />
+                <SimpleSelect
+                  label="Víctima Fatal"
+                  value={victimaFatal}
+                  onChange={setVictimaFatal}
+                  options={[
+                    { label: 'Ambos', value: '' },
+                    { label: 'Sí', value: 'SI' },
+                    { label: 'No', value: 'NO' },
+                  ]}
+                />
 
-              <SimpleSelect
-                label="Daños Materiales"
-                value={danosMateriales}
-                onChange={setDanosMateriales}
-                options={[
-                  { label: 'Ambos', value: '' },
-                  { label: 'Sí', value: 'SI' },
-                  { label: 'No', value: 'NO' },
-                ]}
-              />
+                <SimpleSelect
+                  label="Daños Materiales"
+                  value={danosMateriales}
+                  onChange={setDanosMateriales}
+                  options={[
+                    { label: 'Ambos', value: '' },
+                    { label: 'Sí', value: 'SI' },
+                    { label: 'No', value: 'NO' },
+                  ]}
+                />
 
-              <View style={styles.switchRow}>
-                <Text style={styles.switchLabel}>Solo Heridos Leve/Grave</Text>
-                <Switch value={soloLesionados} onValueChange={setSoloLesionados} />
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Solo Heridos Leve/Grave</Text>
+                  <Switch value={soloLesionados} onValueChange={setSoloLesionados} />
+                </View>
+
+                <AppButton title="Filtrar" icon="filter-list" onPress={handleFilter} />
+              </Section>
+
+              <View style={styles.rowBetween}>
+                <Text style={styles.helperText}>
+                  Página {page + 1} de {totalPages}
+                </Text>
+                <Text style={styles.helperText}>Total: {total}</Text>
               </View>
 
-              <AppButton title="Filtrar" icon="filter-list" onPress={handleFilter} />
-            </Section>
-
-            <View style={styles.rowBetween}>
-              <Text style={styles.helperText}>
-                Página {page + 1} de {totalPages}
-              </Text>
-              <Text style={styles.helperText}>Total: {total}</Text>
+              {loading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator />
+                  <Text style={styles.loadingText}>Cargando...</Text>
+                </View>
+              ) : null}
             </View>
-
-            {loading ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator />
-                <Text style={styles.loadingText}>Cargando...</Text>
-              </View>
-            ) : null}
-          </View>
+          </CollapsibleContainer>
         }
         renderItem={({ item }) => (
           <HechoVialCard
@@ -391,11 +402,15 @@ export default function HechosVialesScreen({ navigation }: { navigation?: any })
           />
         )}
         ListEmptyComponent={
-          !loading ? (
+          loading ? (
+            <View style={styles.section}>
+              <SkeletonList count={4} variant="medium" />
+            </View>
+          ) : (
             <View style={styles.section}>
               <Text style={styles.helperText}>No hay hechos viales para mostrar</Text>
             </View>
-          ) : null
+          )
         }
         ListFooterComponent={
           <View style={styles.rowBetween}>

@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInRight,
+} from 'react-native-reanimated';
 import { useAuth } from '../auth/AuthContext';
 import { Navbar, type NavbarTabKey } from '../components/Navbar';
 import { MisActasScreen } from './MisActasScreen';
@@ -21,7 +26,7 @@ export function HomeScreen() {
   const [activeGroup, setActiveGroup] = useState<NavbarGroupKey>('actas');
   const [editActa, setEditActa] = useState<ActaRequest | null>(null);
 
-  const fade = useRef(new Animated.Value(1)).current;
+  //const fade = useRef(new Animated.Value(1)).current;
 
   const confirmLeaveActa = (onConfirm: () => void) => {
     Alert.alert('Confirmación', '¿seguro que deseas salir del formulario?', [
@@ -34,7 +39,7 @@ export function HomeScreen() {
     ]);
   };
 
-  useEffect(() => {
+  /*useEffect(() => {
     //printTest();
     fade.setValue(0);
     Animated.timing(fade, {
@@ -42,7 +47,7 @@ export function HomeScreen() {
       duration: 180,
       useNativeDriver: true,
     }).start();
-  }, [fade, tab]);
+  }, [fade, tab]);*/
 
   const handleChangeTab = (nextTab: NavbarTabKey) => {
     if (tab === 'nueva_acta') {
@@ -152,7 +157,8 @@ export function HomeScreen() {
         onChangeGroup={handleChangeGroup}
       />
 
-      <Animated.View style={[styles.body, { opacity: fade }]}>
+      <Animated.View key={tab} style={[styles.body]} entering={SlideInRight.duration(250)}
+        exiting={FadeOut.duration(150)} >
         {content}
       </Animated.View>
     </View>

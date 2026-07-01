@@ -46,6 +46,7 @@ import { TIPOS_INVOLUCRADOS } from './HechosVialesScreen';
 import { DateFieldString } from '../components/ui/SelectedFieldString';
 import { Divider } from 'react-native-paper';
 import { PickerField } from '../components/forms/PickerField';
+import { SkeletonForm } from '../components/ui/skeleton/SkeletonForm';
 
 type ActaFormTabKey = 'acta' | 'infractor' | 'vehiculo' | 'firma';
 type DatePickerTarget = 'acta_fecha' | 'infractor_nacimiento' | 'licencia_expedicion' | 'licencia_vencimiento';
@@ -1660,10 +1661,7 @@ export function NuevaActaScreen({
       {tab === 'acta' ? (
         <Section title="Datos del acta">
           {isLoadingCatalogs ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator />
-              <Text style={styles.loadingText}>Cargando catálogos...</Text>
-            </View>
+            <SkeletonForm sections={3} fieldsPerSection={5} />
           ) : null}
 
           {catalogsError ? <Text style={styles.errorText}>{catalogsError}</Text> : null}

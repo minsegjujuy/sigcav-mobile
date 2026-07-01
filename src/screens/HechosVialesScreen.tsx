@@ -33,6 +33,7 @@ import type { Grupo, Puesto } from '../features/catalog/types';
 import type { Localidad, UnidadRegional } from '../features/ubicacion/types';
 import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
 import { CONFIGURACION_VIA, ESTADO_AMBIENTAL, ESTADO_CALZADA, ESTADO_FISICO_CALZADA, LUZ_ARTIFICIAL, MATERIAL_CALZADA, OptionNumber, OptionString, POSIBLES_CAUSAS, SEMAFORO, TIPO_VIA, TIPOS_COLISION, TIPOS_INVOLUCRADOS, TIPOS_SINIESTRO } from '../features/hechos-viales/values';
+import { SkeletonForm } from '../components/ui/skeleton/SkeletonForm';
 
 export { TIPOS_INVOLUCRADOS };
 
@@ -452,8 +453,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
 
       {isLoadingCatalogs ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator />
-          <Text style={styles.loadingText}>Cargando catálogos...</Text>
+          <SkeletonForm sections={3} fieldsPerSection={5} />
         </View>
       ) : null}
       {catalogsError ? <Text style={styles.errorText}>{catalogsError}</Text> : null}

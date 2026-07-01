@@ -23,9 +23,10 @@ import { AppButton } from '../components/ui/AppButton';
 import type { ActaRequest } from '../features/actas/types';
 import { actaResumenToActaRequest } from '../utils/actaResumenToActaRequest';
 import { HttpError } from '../api/http';
-import { printTest } from './TestPrint';
 import { getSelectedPrinterAddress, sendPrintZpl } from '../services/BluetoothPrintService';
 import { validarPeriodoDiasISO } from '../utils/formatearFecha';
+import { SkeletonList } from '../components/ui/skeleton/SkeletonList';
+import { CollapsibleContainer } from '../components/ui/CollapsibleContainer';
 
 export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest) => void }) {
   const { jwt } = useAuth();
@@ -144,9 +145,6 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
       setError(null);
       setIsLoading(true);
       try {
-        console.log('MisActas: JWT roles', rolesDebug);
-        console.log('MisActas: JWT rol claim', rolClaim);
-        console.log('MisActas: isPersonal', isPersonal);
 
         const params: Record<string, unknown> = {
           page,
@@ -209,98 +207,101 @@ export function MisActasScreen({ onEditActa }: { onEditActa: (acta: ActaRequest)
       <Text style={styles.welcome}>
         Legajo: {username ?? '-'} - Rol: {roleLabel ?? '-'}
       </Text>
+      <CollapsibleContainer title='Filtro de actas' iconTitle="filter-list">
+        <View style={styles.filters}>
+          <View style={styles.filterRow}>
+            <Text style={styles.label}>Infractor</Text>
+            <TextInput
+              value={infractor}
+              onChangeText={setInfractor}
+              placeholder="Nombre / apellido"
+              style={styles.input}
+              autoCapitalize="words"
+            />
+          </View>
 
-      <View style={styles.filters}>
-        <View style={styles.filterRow}>
-          <Text style={styles.label}>Infractor</Text>
-          <TextInput
-            value={infractor}
-            onChangeText={setInfractor}
-            placeholder="Nombre / apellido"
-            style={styles.input}
-            autoCapitalize="words"
-          />
+          <View style={styles.filterRow}>
+            <Text style={styles.label}>Nro</Text>
+            <TextInput
+              value={nro}
+              onChangeText={setNro}
+              placeholder="Número de acta"
+              style={styles.input}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.filterActions}>
+            <AppButton
+              title="Buscar"
+              icon="search"
+              onPress={() => {
+                setAppliedInfractor(infractor);
+                setAppliedNro(nro);
+                setPage(0);
+              }}
+              disabled={isLoading}
+              size="sm"
+            />
+            <AppButton
+              title="Limpiar"
+              icon="close"
+              variant="secondary"
+              onPress={() => {
+                setInfractor('');
+                setNro('');
+                setAppliedInfractor('');
+                setAppliedNro('');
+                setPage(0);
+              }}
+              disabled={isLoading}
+              size="sm"
+            />
+          </View>
+
+          <Text style={styles.helper}>
+            Rol: {rolClaim || (isPersonal ? 'PERSONAL' : 'OTRO')} ({rolesDebug.join(', ') || 'sin roles'}) | Orden: fecha desc | Página:{' '}
+            {currentPage + 1}
+            {typeof totalPages === 'number' ? ` / ${totalPages}` : ''}
+          </Text>
         </View>
-
-        <View style={styles.filterRow}>
-          <Text style={styles.label}>Nro</Text>
-          <TextInput
-            value={nro}
-            onChangeText={setNro}
-            placeholder="Número de acta"
-            style={styles.input}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <View style={styles.filterActions}>
-          <AppButton
-            title="Buscar"
-            icon="search"
-            onPress={() => {
-              setAppliedInfractor(infractor);
-              setAppliedNro(nro);
-              setPage(0);
-            }}
-            disabled={isLoading}
-            size="sm"
-          />
-          <AppButton
-            title="Limpiar"
-            icon="close"
-            variant="secondary"
-            onPress={() => {
-              setInfractor('');
-              setNro('');
-              setAppliedInfractor('');
-              setAppliedNro('');
-              setPage(0);
-            }}
-            disabled={isLoading}
-            size="sm"
-          />
-        </View>
-
-        <Text style={styles.helper}>
-          Rol: {rolClaim || (isPersonal ? 'PERSONAL' : 'OTRO')} ({rolesDebug.join(', ') || 'sin roles'}) | Orden: fecha desc | Página:{' '}
-          {currentPage + 1}
-          {typeof totalPages === 'number' ? ` / ${totalPages}` : ''}
-        </Text>
-      </View>
-
-      {isLoading ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator />
-          <Text style={styles.helper}>Cargando...</Text>
-        </View>
-      ) : null}
+      </CollapsibleContainer>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <FlatList
-        data={content}
-        keyExtractor={(item) => String(item.idActa ?? item.nro)}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          !isLoading ? <Text style={styles.helper}>No hay actas para mostrar.</Text> : null
-        }
-        renderItem={({ item }) => (
-          <ActaCard
-            item={item}
-            onEdit={() => {
-              console.log('Editar acta: resumen.ubicacionResponse', item.ubicacionResponse);
-              console.log('Editar acta: resumen.vehiculo', item.vehiculo);
-              const req = actaResumenToActaRequest(item);
-              console.log('Editar acta: ActaRequest', req);
-              onEditActa(req);
-            }}
-            onOpenMaps={() => openGoogleMaps(item.ubicacionResponse?.lat, item.ubicacionResponse?.lng)}
-            onPdf={() => generarPdfActa(item.nro)}
-            onZpl={() => generarZplActa(item.nro)}
-            isPdfBusy={pdfBusyNro === item.nro}
-          />
-        )}
-      />
+      {isLoading ? (
+        <SkeletonList count={5} variant="medium" />
+      ) : (
+        <FlatList
+          data={content}
+          keyExtractor={(item) => String(item.idActa ?? item.nro)}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={styles.helper}>No hay actas para mostrar.</Text>
+          }
+          renderItem={({ item }) => (
+            <ActaCard
+              item={item}
+              onEdit={() => {
+                console.log('Editar acta: resumen.ubicacionResponse', item.ubicacionResponse);
+                console.log('Editar acta: resumen.vehiculo', item.vehiculo);
+
+                const req = actaResumenToActaRequest(item);
+
+                console.log('Editar acta: ActaRequest', req);
+
+                onEditActa(req);
+              }}
+              onOpenMaps={() =>
+                openGoogleMaps(item.ubicacionResponse?.lat, item.ubicacionResponse?.lng)
+              }
+              onPdf={() => generarPdfActa(item.nro)}
+              onZpl={() => generarZplActa(item.nro)}
+              isPdfBusy={pdfBusyNro === item.nro}
+            />
+          )}
+        />
+      )}
 
       <View style={styles.pagination}>
         <AppButton
@@ -412,17 +413,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '900', color: Colors.textPrimary },
   welcome: { fontSize: 13, fontWeight: '800', color: Colors.textSecondary },
   filters: {
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 18,
+    //borderWidth: 1,
+    //borderColor: Colors.divider,
+    //borderRadius: 18,
     padding: 12,
     gap: 10,
     backgroundColor: Colors.surface,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
   },
   filterRow: { gap: 6 },
   filterActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },

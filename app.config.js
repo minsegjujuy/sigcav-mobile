@@ -45,7 +45,7 @@ const config  = {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
     ],
     "extra": {
       "eas": {

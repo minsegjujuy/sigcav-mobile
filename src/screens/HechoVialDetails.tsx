@@ -21,6 +21,13 @@ const Label = ({ label, value }: { label: string; value?: any }) => (
 
 const Divider = () => <View style={styles.divider} />;
 
+const booleanText = (value?: boolean | string) => {
+  if (value === true) return 'Sí';
+  if (value === false) return 'No';
+  if (value === null || value === undefined || value === '') return '—';
+  return String(value);
+};
+
 export const HechoVialDetalle = ({ hecho }: Props) => {
   const fecha = new Date(hecho.fecha);
 
@@ -171,6 +178,65 @@ export const HechoVialDetalle = ({ hecho }: Props) => {
         <ProtagonistaDetalle key={index} protagonista={p} nro={index + 1} />
       ))}
 
+      {hecho.peatones?.length ? (
+        <>
+          <Divider />
+          <Text style={styles.bigSectionTitle}>Peatones</Text>
+
+          {hecho.peatones.map((peaton, index) => (
+            <View key={peaton.id ?? index} style={styles.peatonCard}>
+              <Text style={styles.peatonTitle}>{index + 1}º Peatón</Text>
+
+              <View style={styles.row}>
+                <View style={styles.col6}>
+                  <Label label="Nombre" value={peaton.nombre} />
+                </View>
+                <View style={styles.col6}>
+                  <Label
+                    label="Documento"
+                    value={
+                      peaton.tipo || peaton.numeroDocumento
+                        ? `${peaton.tipo ?? ''} ${peaton.numeroDocumento ?? ''}`.trim()
+                        : '—'
+                    }
+                  />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Género" value={peaton.genero} />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Nacionalidad" value={peaton.nacionalidad} />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Provincia" value={peaton.provincia} />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Localidad" value={peaton.localidad} />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Domicilio" value={peaton.domicilio} />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Edad" value={peaton.edad} />
+                </View>
+                <View style={styles.col6}>
+                  <Label
+                    label="Dispositivo de retención"
+                    value={booleanText(peaton.dispositivoRetencion)}
+                  />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Traslado" value={peaton.trasladado} />
+                </View>
+                <View style={styles.col6}>
+                  <Label label="Estado de salud" value={peaton.estadoSalud} />
+                </View>
+              </View>
+            </View>
+          ))}
+        </>
+      ) : null}
+
       <Divider />
 
       {/* PIE */}
@@ -252,6 +318,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginBottom: 12,
+  },
+  peatonCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  peatonTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 10,
   },
   labelRow: {
     marginBottom: 4,

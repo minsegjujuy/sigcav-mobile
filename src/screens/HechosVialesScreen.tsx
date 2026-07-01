@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { HechoVialForm, Involucrado } from '../features/hechos-viales/types';
+import { hechoVialFormSchema } from '../features/hechos-viales/validations';
 import type { UbicacionRequest } from '../features/actas/types';
 import { SeccionProtagonistasRN } from './SeccionProtagonista.native';
 import { SeccionPeatonRN } from './SeccionPeaton.native';
@@ -35,6 +35,11 @@ import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
 import { CONFIGURACION_VIA, ESTADO_AMBIENTAL, ESTADO_CALZADA, ESTADO_FISICO_CALZADA, LUZ_ARTIFICIAL, MATERIAL_CALZADA, OptionNumber, OptionString, POSIBLES_CAUSAS, SEMAFORO, TIPO_VIA, TIPOS_COLISION, TIPOS_INVOLUCRADOS, TIPOS_SINIESTRO } from '../features/hechos-viales/values';
 
 export { TIPOS_INVOLUCRADOS };
+
+const ErrorText = ({ message }: { message?: string | null }) => {
+  if (!message) return null;
+  return <Text style={styles.errorText}>{message}</Text>;
+};
 
 interface Props {
   getPuestos?: () => Promise<Puesto[]>;
@@ -137,36 +142,11 @@ export const HechoVialFormRN: React.FC<Props> = ({
   limpiarHechoVial,
 }) => {
   const { jwt } = useAuth();
-  const [formValidationErrors, setFormValidationErrors] = useState<string[]>([]);
   const scrollRef = useRef<ScrollView | null>(null);
-  const errorPulse = useRef(new Animated.Value(0)).current;
 
   const scrollToTop = () => {
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
-
-  useEffect(() => {
-    if (formValidationErrors.length === 0) return;
-
-    errorPulse.setValue(0);
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(errorPulse, { toValue: 1, duration: 520, useNativeDriver: true }),
-        Animated.timing(errorPulse, { toValue: 0, duration: 520, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    const stopTimer = setTimeout(() => {
-      anim.stop();
-      errorPulse.setValue(0);
-    }, 8000);
-
-    return () => {
-      clearTimeout(stopTimer);
-      anim.stop();
-      errorPulse.setValue(0);
-    };
-  }, [errorPulse, formValidationErrors.length]);
 
   const {
     control,
@@ -174,6 +154,8 @@ export const HechoVialFormRN: React.FC<Props> = ({
     reset,
     watch,
     setValue,
+    setError,
+    clearErrors,
   } = useForm<HechoVialForm>({
     defaultValues,
   });
@@ -406,13 +388,19 @@ export const HechoVialFormRN: React.FC<Props> = ({
         protagonistas: protagonistasNormalizados,
         ubicacionReq,
       };
-      const validation = validateHechoVialForm(payload);
-      if (validation.length > 0) {
-        setFormValidationErrors(validation);
+
+      clearErrors();
+      const parsed = hechoVialFormSchema.safeParse(payload);
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          const fieldPath = issue.path.join('.');
+          if (fieldPath) {
+            setError(fieldPath as any, { type: 'manual', message: issue.message });
+          }
+        }
         scrollToTop();
         return;
       }
-      setFormValidationErrors([]);
 
       const camposPendientes = getCamposPendientesProtagonistas(payload.protagonistas);
       const enviarHechoVial = async () => {
@@ -459,21 +447,6 @@ export const HechoVialFormRN: React.FC<Props> = ({
         contentContainerStyle={[styles.container, { paddingBottom: 140 }]}
       >
         <Text style={styles.title}>Informe de Hecho Vial</Text>
-        {formValidationErrors.length > 0 ? (
-          <Animated.View
-            style={{
-              gap: 4,
-              opacity: errorPulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
-              transform: [{ scale: errorPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) }],
-            }}
-          >
-            {formValidationErrors.map((msg, idx) => (
-              <Text key={`${idx}-${msg}`} style={styles.errorText}>
-                {msg}
-              </Text>
-            ))}
-          </Animated.View>
-        ) : null}
 
       <SectionTitle title="Datos de Identificación" />
 
@@ -506,14 +479,17 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <Controller
         control={control}
         name="fecha"
-        render={({ field }) => (
-          <DateFieldString
-            label="Fecha"
-            placeholder="Seleccioná una fecha"
-            value={field.value == null ? null : String(field.value)}
-            onChangeValue={(v) => field.onChange(v ?? '')}
-            allowClear
-          />
+        render={({ field, fieldState }) => (
+          <View style={styles.fieldContainer}>
+            <DateFieldString
+              label="Fecha"
+              placeholder="Seleccioná una fecha"
+              value={field.value == null ? null : String(field.value)}
+              onChangeValue={(v) => field.onChange(v ?? '')}
+              allowClear
+            />
+            <ErrorText message={fieldState.error?.message} />
+          </View>
         )}
       />
       <ControlledInput control={control} name="hora" label="Hora" placeholder="HH:MM:SS" />
@@ -773,7 +749,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <SeccionProtagonistasRN control={control} watch={watch} setValue={setValue} />
       <SeccionPeatonRN control={control} setValue={setValue} />
 
-        <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit)} />
+        <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit, scrollToTop)} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -837,20 +813,40 @@ const UnidadIntervinienteCard = ({
           <Controller
             control={control}
             name={`unidades.${index}.personal.${pIndex}.nombre`}
-            render={({ field }) => <Input label="Nombre" value={field.value ?? ''} onChangeText={field.onChange} />}
+            render={({ field, fieldState }) => (
+              <Input
+                label="Nombre"
+                value={field.value ?? ''}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+              />
+            )}
           />
 
           <Controller
             control={control}
             name={`unidades.${index}.personal.${pIndex}.jerarquia`}
-            render={({ field }) => <Input label="Jerarquía" value={field.value ?? ''} onChangeText={field.onChange} />}
+            render={({ field, fieldState }) => (
+              <Input
+                label="Jerarquía"
+                value={field.value ?? ''}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+              />
+            )}
           />
 
           <Controller
             control={control}
             name={`unidades.${index}.personal.${pIndex}.observacion`}
-            render={({ field }) => (
-              <Input label="Observación" multiline value={field.value ?? ''} onChangeText={field.onChange} />
+            render={({ field, fieldState }) => (
+              <Input
+                label="Observación"
+                multiline
+                value={field.value ?? ''}
+                onChangeText={field.onChange}
+                error={fieldState.error?.message}
+              />
             )}
           />
         </View>
@@ -873,6 +869,7 @@ const Input = ({
   placeholder,
   keyboardType,
   multiline,
+  error,
 }: {
   label: string;
   value: string;
@@ -880,6 +877,7 @@ const Input = ({
   placeholder?: string;
   keyboardType?: 'default' | 'numeric' | 'email-address';
   multiline?: boolean;
+  error?: string | null;
 }) => (
   <View style={styles.fieldContainer}>
     <Label>{label}</Label>
@@ -892,6 +890,7 @@ const Input = ({
       multiline={multiline}
       textAlignVertical={multiline ? 'top' : 'center'}
     />
+    <ErrorText message={error} />
   </View>
 );
 
@@ -905,58 +904,6 @@ function formatTimeHhMmSs(input: string): string {
   if (digits.length > 2) out = `${hh}:${mm}`;
   if (digits.length > 4) out = `${hh}:${mm}:${ss}`;
   return out;
-}
-
-function validateHechoVialForm(input: HechoVialForm): string[] {
-  const errors: string[] = [];
-
-  const isBlank = (v: unknown) => (v == null ? true : String(v).trim().length === 0);
-
-  if (!(Number.isFinite(input.destacamento) && input.destacamento > 0)) {
-    errors.push('El destacamento es obligatorio');
-  }
-  if (!(Number.isFinite(input.grupo) && input.grupo > 0)) {
-    errors.push('El grupo es obligatorio');
-  }
-  if (isBlank(input.fecha)) errors.push('La fecha es obligatoria');
-  if (isBlank(input.hora)) errors.push('La hora es obligatoria');
-
-  if (!input.ubicacionReq) {
-    errors.push('La ubicación es obligatoria');
-  }
-
-  if (isBlank(input.victimaFatal)) errors.push('Debe indicar si hubo víctima fatal');
-  else if (!/^(SI|NO)$/.test(String(input.victimaFatal).trim())) {
-    errors.push('Víctima fatal solo puede ser SI o NO');
-  }
-
-  if (isBlank(input.danosMateriales)) errors.push('Debe indicar si hubo daños materiales');
-  else if (!/^(SI|NO)$/.test(String(input.danosMateriales).trim())) {
-    errors.push('Daños materiales solo puede ser SI o NO');
-  }
-
-  if (isBlank(input.zona)) errors.push('La zona es obligatoria');
-  if (isBlank(input.tipoVia)) errors.push('El tipo de vía es obligatorio');
-  if (!Array.isArray(input.involucrados) || input.involucrados.length === 0) {
-    errors.push('Debe cargar al menos un involucrado');
-  }
-  if (isBlank(input.configuracionVia)) errors.push('La configuración de vía es obligatoria');
-  if (isBlank(input.estadoCalzada)) errors.push('El estado de la calzada es obligatorio');
-  if (isBlank(input.materialCalzada)) errors.push('El material de la calzada es obligatorio');
-  if (isBlank(input.estadoFisicoCalzada)) errors.push('El estado físico de la calzada es obligatorio');
-  if (isBlank(input.estadoAmbiental)) errors.push('El estado ambiental es obligatorio');
-  if (isBlank(input.luzArtificial)) errors.push('Debe indicar si hay luz artificial');
-  if (isBlank(input.semaforo)) errors.push('Debe indicar si hay semáforo');
-  if (isBlank(input.tipoSiniestro)) errors.push('El tipo de siniestro es obligatorio');
-  if (!Array.isArray(input.posiblesCausas) || input.posiblesCausas.length === 0) {
-    errors.push('Debe cargar al menos una posible causa');
-  }
-  if (isBlank(input.sintesis)) errors.push('La síntesis es obligatoria');
-  if (!Array.isArray(input.protagonistas) || input.protagonistas.length === 0) {
-    errors.push('Debe cargar al menos un protagonista');
-  }
-
-  return Array.from(new Set(errors));
 }
 
 const ControlledInput = ({
@@ -979,13 +926,14 @@ const ControlledInput = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <Input
         label={label}
         value={field.value == null ? '' : String(field.value)}
         placeholder={placeholder}
         keyboardType={keyboardType}
         multiline={multiline}
+        error={fieldState.error?.message}
         onChangeText={(text) => {
           const next = name === 'hora' ? formatTimeHhMmSs(text) : text;
           field.onChange(next);
@@ -1016,33 +964,39 @@ const ControlledPicker = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => {
+    render={({ field, fieldState }) => {
       if (numeric) {
         const raw = typeof field.value === 'number' ? field.value : Number(field.value);
         const value = Number.isFinite(raw) && raw > 0 ? raw : null;
         return (
-          <SelectField
-            label={label}
-            placeholder={placeholder}
-            value={value}
-            options={options as OptionNumber[]}
-            onChangeValue={(v) => field.onChange(v ?? 0)}
-            allowClear={allowClear}
-          />
+          <View style={styles.fieldContainer}>
+            <SelectField
+              label={label}
+              placeholder={placeholder}
+              value={value}
+              options={options as OptionNumber[]}
+              onChangeValue={(v) => field.onChange(v ?? 0)}
+              allowClear={allowClear}
+            />
+            <ErrorText message={fieldState.error?.message} />
+          </View>
         );
       }
 
       const raw = field.value == null ? '' : String(field.value);
       const value = raw.trim() ? raw : null;
       return (
-        <SelectFieldString
-          label={label}
-          placeholder={placeholder}
-          value={value}
-          options={options as OptionString[]}
-          onChangeValue={(v) => field.onChange(v ?? '')}
-          allowClear={allowClear}
-        />
+        <View style={styles.fieldContainer}>
+          <SelectFieldString
+            label={label}
+            placeholder={placeholder}
+            value={value}
+            options={options as OptionString[]}
+            onChangeValue={(v) => field.onChange(v ?? '')}
+            allowClear={allowClear}
+          />
+          <ErrorText message={fieldState.error?.message} />
+        </View>
       );
     }}
   />
@@ -1062,7 +1016,7 @@ const ControlledSegment = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Label>{label}</Label>
         <View style={styles.segmentRow}>
@@ -1081,6 +1035,7 @@ const ControlledSegment = ({
             );
           })}
         </View>
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />

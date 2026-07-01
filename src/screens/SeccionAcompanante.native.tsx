@@ -1,16 +1,16 @@
 import React from 'react';
-import {
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
 import { Controller, useFieldArray, UseFormSetValue } from 'react-hook-form';
-import { styles } from '../components/ui/styles';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AppButton } from '../components/ui/AppButton';
 import { DateFieldString, SelectFieldString } from '../components/ui/SelectedFieldString';
+import { styles } from '../components/ui/styles';
 import { calcularEdad } from '../utils/formatearFecha';
 import { HechoVialForm } from '../features/hechos-viales/types';
+
+const ErrorText = ({ message }: { message?: string | null }) => {
+  if (!message) return null;
+  return <Text style={styles.errorText}>{message}</Text>;
+};
 
 const TIPOS_DOCUMENTO = ['DNI', 'LE', 'LC', 'CI'];
 const GENEROS = ['M', 'F', 'OTRO'];
@@ -80,36 +80,35 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setVal
           <Controller
             control={control}
             name={`protagonistas.${pIndex}.acompanantes.${aIndex}.fechaNacimiento`}
-            render={({ field }) => (
-              <DateFieldString
-                label="Fecha de Nacimiento"
-                placeholder="Seleccioná una fecha"
-                value={field.value == null ? null : String(field.value)}
-                onChangeValue={(v) => {
-                  // 1. Actualizamos el valor de la fecha en el formulario
-                  const fechaSeleccionada = v ?? '';
-                  field.onChange(fechaSeleccionada);
+            render={({ field, fieldState }) => (
+              <View style={styles.fieldContainer}>
+                <DateFieldString
+                  label="Fecha de Nacimiento"
+                  placeholder="Seleccioná una fecha"
+                  value={field.value == null ? null : String(field.value)}
+                  onChangeValue={(v) => {
+                    const fechaSeleccionada = v ?? '';
+                    field.onChange(fechaSeleccionada);
 
-                  // 2. Apuntamos dinámicamente al campo de edad del acompañante específico
-                  const rutaEdad = `protagonistas.${pIndex}.acompanantes.${aIndex}.edad` as const;
+                    const rutaEdad = `protagonistas.${pIndex}.acompanantes.${aIndex}.edad` as const;
 
-                  if (fechaSeleccionada) {
-                    const edadCalculada = calcularEdad(fechaSeleccionada);
-                    setValue(
-                      rutaEdad, 
-                      edadCalculada.toString(), 
-                      { shouldValidate: true, shouldDirty: true }
-                    );
-                  } else {
-                    setValue(
-                      rutaEdad, 
-                      '', 
-                      { shouldValidate: true, shouldDirty: true }
-                    );
-                  }
-                }}
-                allowClear
-              />
+                    if (fechaSeleccionada) {
+                      const edadCalculada = calcularEdad(fechaSeleccionada);
+                      setValue(rutaEdad, edadCalculada.toString(), {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                    } else {
+                      setValue(rutaEdad, '', {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                    }
+                  }}
+                  allowClear
+                />
+                <ErrorText message={fieldState.error?.message} />
+              </View>
             )}
           />
           <ControlledInput editable={false} control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.edad`} label="Edad" keyboardType="numeric" />
@@ -172,16 +171,16 @@ const ControlledInput = ({
   keyboardType?: 'default' | 'numeric';
   placeholder?: string;
   multiline?: boolean;
-  editable?: boolean
+  editable?: boolean;
 }) => (
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label}</Text>
         <TextInput
-          style={[styles.input, multiline && styles.textArea]}
+          style={[styles.input, multiline && styles.textArea, editable === false && styles.inputDisabled]}
           value={field.value == null ? '' : String(field.value)}
           onChangeText={field.onChange}
           keyboardType={keyboardType}
@@ -190,6 +189,7 @@ const ControlledInput = ({
           textAlignVertical={multiline ? 'top' : 'center'}
           editable={editable}
         />
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />
@@ -209,18 +209,21 @@ const ControlledPicker = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => {
+    render={({ field, fieldState }) => {
       const raw = field.value == null ? '' : String(field.value);
       const value = raw.trim() ? raw : null;
       return (
-        <SelectFieldString
-          label={label}
-          placeholder="Seleccioná una opción"
-          value={value}
-          options={items.map((item) => ({ label: item, value: item }))}
-          onChangeValue={(v) => field.onChange(v ?? '')}
-          allowClear
-        />
+        <View style={styles.fieldContainer}>
+          <SelectFieldString
+            label={label}
+            placeholder="Seleccioná una opción"
+            value={value}
+            options={items.map((item) => ({ label: item, value: item }))}
+            onChangeValue={(v) => field.onChange(v ?? '')}
+            allowClear
+          />
+          <ErrorText message={fieldState.error?.message} />
+        </View>
       );
     }}
   />
@@ -238,7 +241,7 @@ const BooleanField = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label}</Text>
         <View style={styles.segmentRow}>
@@ -257,6 +260,7 @@ const BooleanField = ({
             );
           })}
         </View>
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />

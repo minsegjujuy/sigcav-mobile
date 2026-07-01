@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Controller, useFieldArray, UseFormSetValue } from 'react-hook-form';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AppButton } from '../components/ui/AppButton';
@@ -6,6 +6,11 @@ import { DateFieldString, SelectFieldString } from '../components/ui/SelectedFie
 import { styles } from '../components/ui/styles';
 import { HechoVialForm, Peaton } from '../features/hechos-viales/types';
 import { calcularEdad } from '../utils/formatearFecha';
+
+const ErrorText = ({ message }: { message?: string | null }) => {
+  if (!message) return null;
+  return <Text style={styles.errorText}>{message}</Text>;
+};
 
 const TIPOS_DOCUMENTO: Peaton['tipo'][] = ['DNI', 'LC', 'LE', 'CI'];
 const GENEROS = ['M', 'F', 'OTRO'];
@@ -108,36 +113,39 @@ export const SeccionPeatonRN: React.FC<Props> = ({ control, setValue }) => {
           <ControlledPicker control={control} name={`peatones.${index}.provincia`} label="Provincia" items={PROVINCIAS} />
           <ControlledInput control={control} name={`peatones.${index}.domicilio`} label="Domicilio" />
           <ControlledInput control={control} name={`peatones.${index}.localidad`} label="Localidad" />
-          <ControlledPicker control={control} name={`peatones.${index}.tipo`} label="Tipo documento" items={TIPOS_DOCUMENTO} />
+          <ControlledPicker control={control} name={`peatones.${index}.tipo`} label="Tipo documento" items={TIPOS_DOCUMENTO.map(String)} />
           <ControlledInput control={control} name={`peatones.${index}.numeroDocumento`} label="Número de documento" keyboardType="numeric" />
 
           <Controller
             control={control}
             name={`peatones.${index}.fechaNacimiento`}
-            render={({ field: renderField }) => (
-              <DateFieldString
-                label="Fecha de nacimiento"
-                placeholder="Seleccioná una fecha"
-                value={renderField.value == null ? null : String(renderField.value)}
-                onChangeValue={(v) => {
-                  const fechaSeleccionada = v ?? '';
-                  renderField.onChange(fechaSeleccionada);
+            render={({ field, fieldState }) => (
+              <View style={styles.fieldContainer}>
+                <DateFieldString
+                  label="Fecha de nacimiento"
+                  placeholder="Seleccioná una fecha"
+                  value={field.value == null ? null : String(field.value)}
+                  onChangeValue={(v) => {
+                    const fechaSeleccionada = v ?? '';
+                    field.onChange(fechaSeleccionada);
 
-                  if (fechaSeleccionada) {
-                    const edad = calcularEdad(fechaSeleccionada);
-                    setValue(`peatones.${index}.edad`, edad.toString(), {
-                      shouldValidate: true,
-                      shouldDirty: true,
-                    });
-                  } else {
-                    setValue(`peatones.${index}.edad`, '', {
-                      shouldValidate: true,
-                      shouldDirty: true,
-                    });
-                  }
-                }}
-                allowClear
-              />
+                    if (fechaSeleccionada) {
+                      const edad = calcularEdad(fechaSeleccionada);
+                      setValue(`peatones.${index}.edad`, edad.toString(), {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                    } else {
+                      setValue(`peatones.${index}.edad`, '', {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                    }
+                  }}
+                  allowClear
+                />
+                <ErrorText message={fieldState.error?.message} />
+              </View>
             )}
           />
 
@@ -183,7 +191,7 @@ const ControlledInput = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label}</Text>
         <TextInput
@@ -196,6 +204,7 @@ const ControlledInput = ({
           textAlignVertical={multiline ? 'top' : 'center'}
           editable={editable}
         />
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />
@@ -215,18 +224,21 @@ const ControlledPicker = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => {
+    render={({ field, fieldState }) => {
       const raw = field.value == null ? '' : String(field.value);
       const value = raw.trim() ? raw : null;
       return (
-        <SelectFieldString
-          label={label}
-          placeholder="Seleccioná una opción"
-          value={value}
-          options={items.map((item) => ({ label: item, value: item }))}
-          onChangeValue={(v) => field.onChange(v ?? '')}
-          allowClear
-        />
+        <View style={styles.fieldContainer}>
+          <SelectFieldString
+            label={label}
+            placeholder="Seleccioná una opción"
+            value={value}
+            options={items.map((item) => ({ label: item, value: item }))}
+            onChangeValue={(v) => field.onChange(v ?? '')}
+            allowClear
+          />
+          <ErrorText message={fieldState.error?.message} />
+        </View>
       );
     }}
   />
@@ -244,7 +256,7 @@ const BooleanField = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label}</Text>
         <View style={styles.segmentRow}>
@@ -263,6 +275,7 @@ const BooleanField = ({
             );
           })}
         </View>
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />

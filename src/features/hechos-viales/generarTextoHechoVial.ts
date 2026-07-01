@@ -1,8 +1,23 @@
 import { formatearFechaA_DDMMYYYY } from "../../utils/formatearFecha";
-import { HechoVialListDto, Protagonista } from "./types";
+import { HechoVialListDto, Peaton, Protagonista } from "./types";
 
 const siNo = (valor?: boolean): string =>
   valor === true ? 'SI' : valor === false ? 'NO' : 'SD';
+
+const buildPeatonText = (peaton: Peaton, index: number) => `
+${index + 1}º PEATÓN
+Nombre: ${peaton.nombre}
+Documento: ${peaton.tipo} ${peaton.numeroDocumento}
+Género: ${peaton.genero}
+Nacionalidad: ${peaton.nacionalidad}
+Provincia: ${peaton.provincia}
+Localidad: ${peaton.localidad}
+Domicilio: ${peaton.domicilio}
+Edad: ${peaton.edad}
+Dispositivo de retención: ${siNo(peaton.dispositivoRetencion)}
+Traslado: ${peaton.trasladado}
+Estado de salud: ${peaton.estadoSalud}
+`;
 
 
 export const generarTextoHechoVial = (hecho: HechoVialListDto): string => {
@@ -48,6 +63,15 @@ ${hecho.sintesis}
 PROTAGONISTAS
 -----------------------------------
 `;
+
+  if (hecho.peatones?.length) {
+    texto += `
+-----------------------------------
+PEATONES
+-----------------------------------
+${hecho.peatones.map((peaton, index) => buildPeatonText(peaton, index)).join('\n')}
+`;
+  }
 
   hecho.protagonistas.forEach((p, index) => {
     texto += `

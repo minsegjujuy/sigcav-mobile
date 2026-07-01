@@ -33,6 +33,11 @@ type ProtagonistaForm = HechoVialForm['protagonistas'][number];
 type LicenciaRequestForm = NonNullable<ProtagonistaForm['licenciaRequest']>;
 type ActaNoCargadaForm = ProtagonistaForm['actasNoCargadas'][number];
 
+const ErrorText = ({ message }: { message?: string | null }) => {
+  if (!message) return null;
+  return <Text style={styles.errorText}>{message}</Text>;
+};
+
 interface Props {
   control: any;
   watch: any;
@@ -181,36 +186,38 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
             <ControlledInput control={control} name={`protagonistas.${index}.conductorNombre`} label="Apellido y Nombres" />
             <ControlledInput control={control} name={`protagonistas.${index}.conductorDni`} label="DNI" keyboardType="numeric" />
             <ControlledPicker control={control} name={`protagonistas.${index}.conductorGenero`} label="Género" items={GENEROS} />
-            <Controller
+          <Controller
             control={control}
             name={`protagonistas.${index}.conductorFechaNacimiento`}
-            render={({ field: renderField }) => (
-              <DateFieldString
-                label="Fecha de Nacimiento"
-                placeholder="Seleccioná una fecha"
-                value={renderField.value == null ? null : String(renderField.value)}
-                onChangeValue={(v) => {
-                  const fechaSeleccionada = v ?? '';
-                  renderField.onChange(fechaSeleccionada);
+            render={({ field: renderField, fieldState }) => (
+              <View style={styles.fieldContainer}>
+                <DateFieldString
+                  label="Fecha de Nacimiento"
+                  placeholder="Seleccioná una fecha"
+                  value={renderField.value == null ? null : String(renderField.value)}
+                  onChangeValue={(v) => {
+                    const fechaSeleccionada = v ?? '';
+                    renderField.onChange(fechaSeleccionada);
 
-                  if (fechaSeleccionada) {
-                    const edad = calcularEdad(fechaSeleccionada);
-                    // Pasamos el index dinámicamente para actualizar la fila correcta
-                    setValue(
-                      `protagonistas.${index}.conductorEdad`, 
-                      edad.toString(),
-                      { shouldValidate: true, shouldDirty: true }
-                    );
-                  } else {
-                    setValue(
-                      `protagonistas.${index}.conductorEdad`, 
-                      '',
-                      { shouldValidate: true, shouldDirty: true }
-                    );
-                  }
-                }}
-                allowClear
-              />
+                    if (fechaSeleccionada) {
+                      const edad = calcularEdad(fechaSeleccionada);
+                      setValue(
+                        `protagonistas.${index}.conductorEdad`,
+                        edad.toString(),
+                        { shouldValidate: true, shouldDirty: true }
+                      );
+                    } else {
+                      setValue(
+                        `protagonistas.${index}.conductorEdad`,
+                        '',
+                        { shouldValidate: true, shouldDirty: true }
+                      );
+                    }
+                  }}
+                  allowClear
+                />
+                <ErrorText message={fieldState.error?.message} />
+              </View>
             )}
           />
             <ControlledInput control={control} editable={false} name={`protagonistas.${index}.conductorEdad`} label="Edad" keyboardType="numeric" />
@@ -408,17 +415,20 @@ const SeccionLicenciaRN = ({
           <Controller
             control={control}
             name={`protagonistas.${protagonistIndex}.licenciaRequest.clase`}
-            render={({ field }) => (
-              <MultiSelectPicker
-                label="Clase de licencia"
-                placeholder="Seleccioná una o más clases"
-                values={String(field.value ?? '')
-                  .split(',')
-                  .map((item) => item.trim())
-                  .filter(Boolean)}
-                options={LICENCIA_CLASE.map((item) => ({ label: item, value: item }))}
-                onChangeValues={(values) => field.onChange(values.join(','))}
-              />
+            render={({ field, fieldState }) => (
+              <View style={styles.fieldContainer}>
+                <MultiSelectPicker
+                  label="Clase de licencia"
+                  placeholder="Seleccioná una o más clases"
+                  values={String(field.value ?? '')
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean)}
+                  options={LICENCIA_CLASE.map((item) => ({ label: item, value: item }))}
+                  onChangeValues={(values) => field.onChange(values.join(','))}
+                />
+                <ErrorText message={fieldState.error?.message} />
+              </View>
             )}
           />
           <ControlledInput
@@ -429,27 +439,33 @@ const SeccionLicenciaRN = ({
           <Controller
             control={control}
             name={`protagonistas.${protagonistIndex}.licenciaRequest.fechaExpedicion`}
-            render={({ field }) => (
-              <PickerLicenseDateField
-                label="Fecha de expedición"
-                placeholder="Seleccioná una fecha"
-                value={field.value == null ? '' : String(field.value)}
-                onChangeValue={(value) => field.onChange(value ?? '')}
-                allowClear
-              />
+            render={({ field, fieldState }) => (
+              <View style={styles.fieldContainer}>
+                <PickerLicenseDateField
+                  label="Fecha de expedición"
+                  placeholder="Seleccioná una fecha"
+                  value={field.value == null ? '' : String(field.value)}
+                  onChangeValue={(value) => field.onChange(value ?? '')}
+                  allowClear
+                />
+                <ErrorText message={fieldState.error?.message} />
+              </View>
             )}
           />
           <Controller
             control={control}
             name={`protagonistas.${protagonistIndex}.licenciaRequest.fechaVencimiento`}
-            render={({ field }) => (
-              <PickerLicenseDateField
-                label="Fecha de vencimiento"
-                placeholder="Seleccioná una fecha"
-                value={field.value == null ? '' : String(field.value)}
-                onChangeValue={(value) => field.onChange(value ?? '')}
-                allowClear
-              />
+            render={({ field, fieldState }) => (
+              <View style={styles.fieldContainer}>
+                <PickerLicenseDateField
+                  label="Fecha de vencimiento"
+                  placeholder="Seleccioná una fecha"
+                  value={field.value == null ? '' : String(field.value)}
+                  onChangeValue={(value) => field.onChange(value ?? '')}
+                  allowClear
+                />
+                <ErrorText message={fieldState.error?.message} />
+              </View>
             )}
           />
         </View>
@@ -529,7 +545,7 @@ const SeccionActasNoCargadasRN = ({
           <Controller
             control={control}
             name={`protagonistas.${pIndex}.actasNoCargadas.${index}.articulado`}
-            render={({ field }) => (
+            render={({ field, fieldState }) => (
               <View style={{ gap: 6 }}>
                 <Text style={styles.label}>Articulados</Text>
                 {isLoadingArticulos ? <Text style={styles.helperText}>Cargando artículos...</Text> : null}
@@ -546,6 +562,7 @@ const SeccionActasNoCargadasRN = ({
                     .filter((item) => String(item.value).trim().length > 0)}
                   onChangeValues={(values) => field.onChange(values.join(','))}
                 />
+                <ErrorText message={fieldState.error?.message} />
               </View>
             )}
           />
@@ -575,7 +592,7 @@ const ControlledInput = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label}</Text>
         <TextInput
@@ -590,6 +607,7 @@ const ControlledInput = ({
           textAlignVertical={multiline ? 'top' : 'center'}
           editable={editable}
         />
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />
@@ -663,19 +681,22 @@ const ControlledPicker = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => {
+    render={({ field, fieldState }) => {
       const raw = field.value == null ? '' : String(field.value);
       const value = raw.trim() ? raw : null;
       return (
-        <SelectFieldString
-          label={label}
-          placeholder="Seleccioná una opción"
-          value={value}
-          options={items.map((item) => ({ label: item, value: item }))}
-          onChangeValue={(v) => field.onChange(v ?? '')}
-          disabled={disabled}
-          allowClear
-        />
+        <View style={styles.fieldContainer}>
+          <SelectFieldString
+            label={label}
+            placeholder="Seleccioná una opción"
+            value={value}
+            options={items.map((item) => ({ label: item, value: item }))}
+            onChangeValue={(v) => field.onChange(v ?? '')}
+            disabled={disabled}
+            allowClear
+          />
+          <ErrorText message={fieldState.error?.message} />
+        </View>
       );
     }}
   />
@@ -693,7 +714,7 @@ const BooleanField = ({
   <Controller
     control={control}
     name={name}
-    render={({ field }) => (
+    render={({ field, fieldState }) => (
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>{label}</Text>
         <View style={styles.segmentRow}>
@@ -712,6 +733,7 @@ const BooleanField = ({
             );
           })}
         </View>
+        <ErrorText message={fieldState.error?.message} />
       </View>
     )}
   />

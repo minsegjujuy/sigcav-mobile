@@ -382,7 +382,7 @@ function ActaCard({
         {item.nro ? (
           <AppButton
             title="PDF"
-            icon="picture-as-pdf"
+            icon="share"
             iconOnly
             size="sm"
             variant="secondary"

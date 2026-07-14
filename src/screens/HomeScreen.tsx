@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -28,7 +28,9 @@ export function HomeScreen() {
 
   //const fade = useRef(new Animated.Value(1)).current;
 
-  const confirmLeaveActa = (onConfirm: () => void) => {
+  const isFormTab = tab === 'nueva_acta' || tab === 'nuevo_hecho_vial';
+
+  const confirmLeaveForm = (onConfirm: () => void) => {
     Alert.alert('Confirmación', '¿seguro que deseas salir del formulario?', [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -50,8 +52,8 @@ export function HomeScreen() {
   }, [fade, tab]);*/
 
   const handleChangeTab = (nextTab: NavbarTabKey) => {
-    if (tab === 'nueva_acta') {
-      confirmLeaveActa(() => {
+    if (isFormTab && nextTab !== tab) {
+      confirmLeaveForm(() => {
         setTab(nextTab);
 
         if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
@@ -80,8 +82,8 @@ export function HomeScreen() {
     const nextTab =
       group === 'actas' ? 'mis_actas' : group === 'hechos_viales' ? 'mis_hechos_viales' : 'configuracion';
 
-    if (tab === 'nueva_acta') {
-      confirmLeaveActa(() => {
+    if (isFormTab) {
+      confirmLeaveForm(() => {
         setActiveGroup(group);
         setTab(nextTab);
       });
@@ -132,6 +134,25 @@ export function HomeScreen() {
         return null;
     }
   }, [editActa, tab]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !isFormTab) return undefined;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      confirmLeaveForm(() => {
+        if (tab === 'nuevo_hecho_vial') {
+          setActiveGroup('hechos_viales');
+          setTab('mis_hechos_viales');
+        } else {
+          setActiveGroup('actas');
+          setTab('mis_actas');
+        }
+      });
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [isFormTab, tab]);
 
   return (
     <View style={styles.container}>

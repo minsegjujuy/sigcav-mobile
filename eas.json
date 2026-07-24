@@ -1,0 +1,22 @@
+{
+  "build": {
+    "preview": {
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "x"
+      }
+    },
+    "production": {
+      "environment": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://aaa3-181-87-209-196.ngrok-free.app"
+      }
+    }
+  }
+}

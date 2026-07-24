@@ -85,6 +85,8 @@ const defaultValues: HechoVialForm = {
   sintesis: '',
   protagonistas: [],
   peatones: [],
+  deLosHechos: '',
+  nota: '',
   unidades: [
     {
       unidad: '',
@@ -123,6 +125,9 @@ function getCamposPendientesProtagonistas(protagonistas: HechoVialForm['protagon
     if (String(protagonista.dominio ?? '').trim().length === 0) campos.push('dominio');
     if (String(protagonista.marca ?? '').trim().length === 0) campos.push('marca');
     if (String(protagonista.modelo ?? '').trim().length === 0) campos.push('modelo');
+    if (String(protagonista.conductorDni ?? '').trim().length === 0) campos.push('dni');
+    if (String(protagonista.conductorNombre ?? '').trim().length === 0) campos.push('nombre');
+    if (String(protagonista.conductorFechaNacimiento ?? '').trim().length === 0) campos.push('fecha de nacimiento');
     if (!protagonista.licenciaRequest) campos.push('licencia de conducir');
     if (!Array.isArray(protagonista.actasNoCargadas) || protagonista.actasNoCargadas.length === 0) {
       campos.push('actas');
@@ -234,36 +239,72 @@ export const HechoVialFormRN: React.FC<Props> = ({
   }, [jwt]);
 
   useEffect(() => {
-    if (modo === 'edit' && hechoVial) {
+    let isMounted = true;
+
+    const initializeEditMode = async () => {
+      if (modo !== 'edit' || !hechoVial) return;
+
       reset(hechoVial);
 
       const ub = hechoVial.ubicacionReq ?? defaultUbicacion;
       const depto = (ub.departamento ?? '').trim();
-      const unidadRegional = ub.unidadRegional ?? null;
+      const unidadRegionalTexto = String(ub.unidadRegional ?? '').trim();
+      const localidadTexto = String(ub.localidad ?? '').trim();
 
       setUbicacionError(null);
       setUrError(null);
       setUbicLat(ub.lat ? String(ub.lat) : null);
       setUbicLng(ub.lng ? String(ub.lng) : null);
       setUbicDepartamento(depto || null);
-      setUbicUnidadRegional(unidadRegional);
-      setUbicLocalidad(ub.localidad ?? null);
+      setUbicUnidadRegional(null);
+      setUbicLocalidad(null);
       setUbicDescripcion(ub.descripcion ?? '');
-
       setUnidadesRegionales([]);
       setLocalidades([]);
 
-      if (depto) {
-        void (async () => {
-          const ur = await loadUnidadesRegionalesForDepartamento(depto);
-          if (!unidadRegional) return;
-          const deptoData = ur
-            .find((u) => u.idUr === unidadRegional)
-            ?.departamentos.find((d) => d.nombre === depto);
-          setLocalidades(deptoData?.localidades ?? []);
-        })();
+      if (!depto) return;
+
+      const ur = await loadUnidadesRegionalesForDepartamento(depto);
+      if (!isMounted) return;
+
+      const normalizeMatchText = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+      const unidadRegionalEncontrada =
+        ur.find((u) => normalizeMatchText(u.nombre) === normalizeMatchText(unidadRegionalTexto)) ??
+        ur.find((u) => normalizeMatchText(String(u.idUr)) === normalizeMatchText(unidadRegionalTexto));
+
+      if (unidadRegionalEncontrada) {
+        setUbicUnidadRegional(unidadRegionalEncontrada.idUr);
       }
+
+      const deptoData = (unidadRegionalEncontrada ?? ur[0])
+        ?.departamentos.find((d) => d.nombre === depto);
+
+      const localidadesDisponibles = deptoData?.localidades ?? [];
+      setLocalidades(localidadesDisponibles);
+
+      const localidadEncontrada =
+        localidadesDisponibles.find(
+          (item) => normalizeMatchText(item.nombre) === normalizeMatchText(localidadTexto)
+        ) ??
+        localidadesDisponibles.find(
+          (item) => normalizeMatchText(String(item.id)) === normalizeMatchText(localidadTexto)
+        );
+
+      if (localidadEncontrada) {
+        setUbicLocalidad(localidadEncontrada.id);
+      }
+    };
+
+    void initializeEditMode();
+
+    if (modo === 'create' && !hechoVial) {
+      reset(defaultValues);
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [hechoVial, modo, reset]);
 
   const puestosOptions = useMemo<OptionNumber[]>(() => puestos.map((p) => ({ label: p.nombre, value: p.idPuesto })), [puestos]);
@@ -519,10 +560,12 @@ export const HechoVialFormRN: React.FC<Props> = ({
         visible={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         initialValue={
-          ubicLat && ubicLng && ubicDepartamento
+          ubicLat && ubicLng && ubicDepartamento && ubicLocalidad && ubicUnidadRegional
             ? {
                 lat: toNumberOrFallback(ubicLat, 0),
                 lng: toNumberOrFallback(ubicLng, 0),
+                localidad: ubicLocalidad,
+                unidadRegional: ubicUnidadRegional,
                 departamento: ubicDepartamento,
                 descripcion: ubicDescripcion,
               }
@@ -744,6 +787,22 @@ export const HechoVialFormRN: React.FC<Props> = ({
         label="Síntesis del Hecho"
         multiline
         placeholder="Ej. En fecha 09/12/2025 a hora 00:00 por comunicación SAME/911..."
+      />
+
+      <ControlledInput
+        control={control}
+        name="nota"
+        label="Nota"
+        multiline
+        placeholder="Colocar cuando se quiera aclarar algo"
+      />
+
+      <ControlledInput
+        control={control}
+        name="deLosHechos"
+        label="De los hechos"
+        multiline
+        placeholder="Colocar cuando se quiera describir algo importante acerca del hecho"
       />
 
       <SeccionProtagonistasRN control={control} watch={watch} setValue={setValue} />

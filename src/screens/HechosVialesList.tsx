@@ -168,7 +168,13 @@ function HechoVialCard({ item, onDetails, onEdit, onDelete }: HechoVialCardProps
 // =====================
 // Pantalla principal
 // =====================
-export default function HechosVialesScreen({ navigation }: { navigation?: any }) {
+export default function HechosVialesScreen({
+  navigation,
+  onEditHechoVial,
+}: {
+  navigation?: any;
+  onEditHechoVial?: (hecho: HechoVialListDto) => void;
+}) {
   const { setHechoVial } = useHechoVial();
   const { jwt } = useAuth();
 
@@ -241,7 +247,8 @@ export default function HechosVialesScreen({ navigation }: { navigation?: any })
 
   const editar = (hecho: HechoVialListDto) => {
     setHechoVial(mapHechoVialListDtoToForm(hecho));
-    navigation?.navigate?.('HechosVialesModificacion', { id: hecho.id });
+    onEditHechoVial?.(hecho);
+    navigation?.navigate?.('nuevo_hecho_vial', { id: hecho.id });
   };
 
   const deleteItem = async (id: number) => {

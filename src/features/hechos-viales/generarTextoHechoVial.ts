@@ -4,6 +4,11 @@ import { HechoVialListDto, Peaton, Protagonista } from "./types";
 const siNo = (valor?: boolean): string =>
   valor === true ? 'SI' : valor === false ? 'NO' : 'SD';
 
+const textoOGuion = (valor?: string | null) => {
+  const texto = String(valor ?? '').trim();
+  return texto.length > 0 ? texto : '-';
+};
+
 const buildPeatonText = (peaton: Peaton, index: number) => `
 ${index + 1}º PEATÓN
 Nombre: ${peaton.nombre}
@@ -13,8 +18,10 @@ Nacionalidad: ${peaton.nacionalidad}
 Provincia: ${peaton.provincia}
 Localidad: ${peaton.localidad}
 Domicilio: ${peaton.domicilio}
-Edad: ${peaton.edad}
+Descripción: ${textoOGuion(peaton.descripcion)}
+Edad: ${parseInt(peaton.edad) === 0 ? 'N/A' : peaton.edad}
 Dispositivo de retención: ${siNo(peaton.dispositivoRetencion)}
+Descripcion: ${peaton.descripcion || '-'}
 Traslado: ${peaton.trasladado}
 Estado de salud: ${peaton.estadoSalud}
 `;
@@ -50,6 +57,8 @@ SEMÁFORO: ${hecho.semaforo}
 
 TIPO SINIESTRO: ${hecho.tipoSiniestro}
 TIPO COLISIÓN: ${hecho.tipoColision || '-'}
+DE LOS HECHOS: ${hecho.deLosHechos || '-'}
+NOTA: ${hecho.nota || '-'}
 
 POSIBLES CAUSAS:
 ${hecho.posiblesCausas.join(' - ')}
@@ -79,6 +88,7 @@ ${index + 1}º PROTAGONISTA – ${p.tipoRodado}
 DOMINIO: ${p.dominio}
 MARCA / MODELO: ${p.marca} ${p.modelo}
 COLOR: ${p.color}
+DESCRIPCIÓN: ${textoOGuion(p.descripcion)}
 ASEGURADO: ${siNo(p.asegurado)}
 RTO: ${siNo(p.rto)}
 CÉDULA: ${siNo(p.cedula)}
@@ -90,12 +100,18 @@ Nombre: ${p.conductorNombre}
 Género: ${p.conductorGenero}
 DNI: ${p.conductorDni}
 Nacionalidad: ${p.conductorNacionalidad}
-Edad: ${p.conductorEdad}
-Licencia: ${p.licenciaRequest?.numero ?? ''} (${p.licenciaRequest?.clase ?? ''}) - ${p.licenciaEstado}
+Edad: ${parseInt(p.conductorEdad) === 0 ? 'N/A' : p.conductorEdad}
+Licencia: ${p.licenciaRequest ? 
+`NRO ${p.licenciaRequest.numero}
+ CLASE ${p.licenciaRequest.clase}
+ EXP ${formatearFechaA_DDMMYYYY(p.licenciaRequest.fechaExpedicion!)}
+ VTO ${formatearFechaA_DDMMYYYY(p.licenciaRequest.fechaVencimiento!)} 
+ AUTORIDAD EXP ${p.licenciaRequest.autoridadExpedicion} ` 
+: 'NO POSEE' }
 Fecha de nacimiento: ${formatearFechaA_DDMMYYYY(p.conductorFechaNacimiento)}
-
+Descripción: ${p.descripcion || '-'}
 Traslado: ${p.trasladoConductor}
-Alcohol: ${p.graduacionAlcoholica}
+Alcohol: ${p.graduacionAlcoholica ? `${p.graduacionAlcoholica} G/L` : 'No se realizó ningún test'}
 ${p.actasNoCargadas?.length
   ? p.actasNoCargadas
       .map((acta) => `SE LABRÓ ACTA DE COMPROBACIÓN NRO ${acta.nroActa} POR ARTICULADO ${acta.articulado}`)
@@ -111,9 +127,11 @@ ${p.actasNoCargadas?.length
 ${i + 1}º Acompañante
 Nombre: ${a.nombre}
 Documento: ${a.tipo} ${a.numeroDocumento}
+Descripción: ${textoOGuion(a.descripcion)}
 Fecha de nacimiento : ${formatearFechaA_DDMMYYYY(a.fechaNacimiento)}
-Edad: ${a.edad}
+Edad: ${parseInt(a.edad) === 0 ? 'N/A' : a.edad}
 Cinturón/Casco: ${siNo(a.usoCinturonCasco)}
+Descripción: ${a.descripcion || '-'}
 Traslado: ${a.trasladado}
 
 `;
@@ -122,6 +140,11 @@ Traslado: ${a.trasladado}
 
     texto += `\n-----------------------------------\n`;
   });
+
+  texto += `
+
+INFORMA: ${hecho.usuario}
+`;
 
   return texto;
 };
@@ -146,9 +169,3 @@ const buildPersonalIntervinienteText = (hecho?: HechoVialListDto) => {
 
   return `PERSONAL INTERVINIENTE:\n${textoUnidades}`;
 };
-//protagonistaDetalle
-
-interface ProtagonistaProps {
-  protagonista: Protagonista;
-  nro: number;
-}

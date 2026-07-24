@@ -42,6 +42,8 @@ export interface HechoVialForm {
   protagonistas: Protagonista[]; //obligatorio
   unidades: UnidadInterviniente[];
   peatones: Peaton[]
+  nota: string,
+  deLosHechos: string,
 }
 
 export interface Peaton {
@@ -59,6 +61,7 @@ export interface Peaton {
   dispositivoRetencion: boolean;
   trasladado: string;
   estadoSalud: string;
+  descripcion: string
 }
 
 
@@ -84,6 +87,7 @@ export interface Acompanante {
   dispositivoRetencion: boolean;
   trasladado: string;
   estadoSalud: string;
+  descripcion: string
 }
 
 export interface Protagonista {
@@ -129,6 +133,7 @@ export interface Protagonista {
   domicilio: string;
   provincia: string;
   localidad: string;
+  descripcion: string
 }
 
 export interface HechoVialListDto {
@@ -159,7 +164,9 @@ export interface HechoVialListDto {
   usuario: string;
   comisaria: string;
   destacamento: number;
-  peatones: Peaton[]
+  peatones: Peaton[];
+  deLosHechos: string;
+  nota: string
 }
 
 export interface UbicacionDto {

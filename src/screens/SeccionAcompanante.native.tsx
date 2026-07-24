@@ -118,6 +118,7 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setVal
 
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.genero`} label="Género" items={GENEROS} />
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.trasladado`} label="Traslado (Hospital/SAME)" multiline />
+          <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.descripcion`} label="Descripcion de la persona" multiline />
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
 
           <AppButton

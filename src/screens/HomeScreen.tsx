@@ -12,6 +12,9 @@ import { NuevaActaScreen } from './NuevaActaScreen';
 import { Colors } from '../theme/colors';
 import { AppButton } from '../components/ui/AppButton';
 import type { ActaRequest } from '../features/actas/types';
+import type { HechoVialForm } from '../features/hechos-viales/types';
+import { mapHechoVialListDtoToForm } from '../features/hechos-viales/mapHechoVialListDtoToForm';
+import type { HechoVialListDto } from '../features/hechos-viales/types';
 import { HechoVialFormRN } from './HechosVialesScreen';
 import HechosVialesScreen from './HechosVialesList';
 import PrinterSelector from '../components/modules/PrinterSelector';
@@ -25,6 +28,7 @@ export function HomeScreen() {
   const [tab, setTab] = useState<NavbarTabKey>('mis_actas');
   const [activeGroup, setActiveGroup] = useState<NavbarGroupKey>('actas');
   const [editActa, setEditActa] = useState<ActaRequest | null>(null);
+  const [editHechoVial, setEditHechoVial] = useState<HechoVialForm | null>(null);
 
   //const fade = useRef(new Animated.Value(1)).current;
 
@@ -41,6 +45,23 @@ export function HomeScreen() {
     ]);
   };
 
+  const goToTab = (nextTab: NavbarTabKey) => {
+    if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
+      setActiveGroup('actas');
+    } else if (nextTab === 'mis_hechos_viales' || nextTab === 'nuevo_hecho_vial') {
+      setActiveGroup('hechos_viales');
+    } else if (nextTab === 'configuracion' || nextTab === '2FA') {
+      setActiveGroup('configuracion');
+    }
+
+    setTab(nextTab);
+  };
+
+  const exitHechoVialForm = (nextTab: NavbarTabKey) => {
+    setEditHechoVial(null);
+    goToTab(nextTab);
+  };
+
   /*useEffect(() => {
     //printTest();
     fade.setValue(0);
@@ -54,28 +75,17 @@ export function HomeScreen() {
   const handleChangeTab = (nextTab: NavbarTabKey) => {
     if (isFormTab && nextTab !== tab) {
       confirmLeaveForm(() => {
-        setTab(nextTab);
-
-        if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
-          setActiveGroup('actas');
-        } else if (nextTab === 'mis_hechos_viales' || nextTab === 'nuevo_hecho_vial') {
-          setActiveGroup('hechos_viales');
-        } else if (nextTab === 'configuracion' || nextTab === '2FA') {
-          setActiveGroup('configuracion');
+        if (tab === 'nuevo_hecho_vial') {
+          exitHechoVialForm(nextTab);
+          return;
         }
+
+        goToTab(nextTab);
       });
       return;
     }
 
-    setTab(nextTab);
-
-    if (nextTab === 'mis_actas' || nextTab === 'nueva_acta') {
-      setActiveGroup('actas');
-    } else if (nextTab === 'mis_hechos_viales' || nextTab === 'nuevo_hecho_vial') {
-      setActiveGroup('hechos_viales');
-    } else if (nextTab === 'configuracion' || nextTab === '2FA') {
-      setActiveGroup('configuracion');
-    }
+    goToTab(nextTab);
   };
 
   const handleChangeGroup = (group: NavbarGroupKey) => {
@@ -84,6 +94,11 @@ export function HomeScreen() {
 
     if (isFormTab) {
       confirmLeaveForm(() => {
+        if (tab === 'nuevo_hecho_vial') {
+          exitHechoVialForm(nextTab);
+          return;
+        }
+
         setActiveGroup(group);
         setTab(nextTab);
       });
@@ -116,13 +131,24 @@ export function HomeScreen() {
         );
 
       case 'mis_hechos_viales':
-        return <HechosVialesScreen />;
+        return (
+          <HechosVialesScreen
+            onEditHechoVial={(hecho: HechoVialListDto) => {
+              setEditHechoVial(mapHechoVialListDtoToForm(hecho));
+              setTab('nuevo_hecho_vial');
+              setActiveGroup('hechos_viales');
+            }}
+          />
+        );
 
       case 'nuevo_hecho_vial':
-        return <HechoVialFormRN
-          modo="create"
-          limpiarHechoVial={() => console.log('limpiar hecho vial')}
-        />;
+        return (
+          <HechoVialFormRN
+            hechoVial={editHechoVial}
+            modo={editHechoVial ? 'edit' : 'create'}
+            limpiarHechoVial={() => setEditHechoVial(null)}
+          />
+        );
 
       case 'configuracion':
         return <PrinterSelector />;
@@ -133,7 +159,7 @@ export function HomeScreen() {
       default:
         return null;
     }
-  }, [editActa, tab]);
+  }, [editActa, editHechoVial, tab]);
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !isFormTab) return undefined;
@@ -141,8 +167,7 @@ export function HomeScreen() {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       confirmLeaveForm(() => {
         if (tab === 'nuevo_hecho_vial') {
-          setActiveGroup('hechos_viales');
-          setTab('mis_hechos_viales');
+          exitHechoVialForm('mis_hechos_viales');
         } else {
           setActiveGroup('actas');
           setTab('mis_actas');

@@ -72,6 +72,7 @@ function createPeaton(): Peaton {
     dispositivoRetencion: false,
     trasladado: '',
     estadoSalud: '',
+    descripcion: ''
   };
 }
 
@@ -164,6 +165,7 @@ export const SeccionPeatonRN: React.FC<Props> = ({ control, setValue }) => {
           />
 
           <ControlledInput control={control} name={`peatones.${index}.trasladado`} label="Traslado (Hospital/SAME)" multiline />
+          <ControlledInput control={control} name={`peatones.${index}.descripcion`} label="Descripcion de la persona" multiline />
           <ControlledPicker control={control} name={`peatones.${index}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
         </View>
       ))}

@@ -145,6 +145,7 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
               jerarquia: '',
               legajo: '',
               trasladoConductor: '',
+              descripcion: '',
               graduacionAlcoholica: null,
               estadoSalud: '',
               licenciaRequest: createLicenciaRequestForm(),
@@ -229,6 +230,7 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
             <ControlledPicker control={control} name={`protagonistas.${index}.licenciaEstado`} label="Estado Licencia" items={LICENCIA_ESTADO} />
             <ControlledInput control={control} name={`protagonistas.${index}.municipio`} label="Municipio" />
             <ControlledInput control={control} name={`protagonistas.${index}.trasladoConductor`} label="Traslado (Hospital/SAME)" multiline />
+            <ControlledInput control={control} name={`protagonistas.${index}.descripcion`} label="Descripcion de la persona" multiline />
             <ControlledDecimalInput control={control} name={`protagonistas.${index}.graduacionAlcoholica`} label="Graduación alcohólica (g/L)" placeholder="0.00" />
             <ControlledPicker control={control} name={`protagonistas.${index}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
 

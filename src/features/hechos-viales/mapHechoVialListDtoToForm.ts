@@ -11,7 +11,7 @@ export function mapHechoVialListDtoToForm(
   return {
     id: dto.id,
 
-    destacamento: Number(dto.puesto),
+    destacamento: Number(dto.destacamento),
     grupo: dto.grupo,
     fecha: fecha ?? '',
     hora: horaCompleta ? horaCompleta.substring(0, 5) : '',
@@ -55,9 +55,22 @@ export function mapHechoVialListDtoToForm(
 
     posiblesCausas: dto.posiblesCausas,
     sintesis: dto.sintesis,
-    protagonistas: dto.protagonistas,
+    protagonistas: dto.protagonistas.map((protagonista) => ({
+      ...protagonista,
+      descripcion: protagonista.descripcion,
+      acompanantes: protagonista.acompanantes?.map((acompanante) => ({
+        ...acompanante,
+        descripcion: acompanante.descripcion ?? '',
+      })) ?? [],
+      actasNoCargadas: protagonista.actasNoCargadas ?? [],
+    })),
     unidades: dto.unidades,
-    peatones: dto.peatones ?? [],
+    peatones: dto.peatones?.map((peaton) => ({
+      ...peaton,
+      descripcion: peaton.descripcion ?? '',
+    })) ?? [],
+    deLosHechos: dto.deLosHechos,
+    nota: dto.nota
     /*protagonistas: dto.protagonistas.map((p) => ({
       ...p,
       asegurado: Boolean(p.asegurado),

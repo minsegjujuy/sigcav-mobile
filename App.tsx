@@ -10,6 +10,9 @@ import { Colors } from './src/theme/colors';
 import { NavigationContainer } from '@react-navigation/native';
 import { HechoVialProvider } from './src/features/hechos-viales/HechoVialContext';
 import { installAuthRefreshInterceptor } from './src/auth/installAuthRefreshInterceptor';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { asyncStoragePersister } from './src/features/common/asyncStoragePersister';
 
 installAuthRefreshInterceptor();
 
@@ -18,9 +21,24 @@ function Root() {
   return jwt ? <HomeScreen /> : <LoginScreen />;
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 60 * 24, // 24h
+      gcTime: 1000 * 60 * 60 * 24, // 24 horas
+      retry: 2,
+    },
+  },
+});
+
 export default function App() {
   return (
-    <NavigationContainer>
+    <PersistQueryClientProvider client={queryClient}
+    persistOptions={{
+        persister: asyncStoragePersister,
+        maxAge: 1000 * 60 * 60 * 24,
+      }}>
+      <NavigationContainer>
       <HechoVialProvider>
         <SafeAreaProvider>
           <PaperProvider>
@@ -35,6 +53,7 @@ export default function App() {
         </SafeAreaProvider>
       </HechoVialProvider>
     </NavigationContainer>
+    </PersistQueryClientProvider>
     
   );
 }

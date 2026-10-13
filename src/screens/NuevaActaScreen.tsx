@@ -14,17 +14,10 @@ import {
 import type { ActaRequest, InfractorSolicitud, TestigoRequest } from '../features/actas/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthContext';
-import { getGrupos } from '../services/GrupoService';
-import { getPuestos } from '../services/PuestoService';
-import { getAllTipoActas } from '../services/TipoActaService';
-import { getLeyes } from '../services/LeyService';
-import { getArticulosByLey } from '../services/ArticuloService';
-import type { Articulo, Grupo, Ley, Puesto, Tipo } from '../features/catalog/types';
+import type { Articulo, Grupo, Puesto, Tipo } from '../features/catalog/types';
 import { MapaJujuyLeaflet } from '../components/map/MapaJujuyLeaflet';
 import { findDepartamento } from '../features/geo/findDepartamento';
 import { DEPARTAMENTOS_JUJUY } from '../features/geo/jujuyGeoJson';
-import { obtenerUnidadesRegionalesPorDepartamento } from '../services/UnidadRegionalService';
-import type { Localidad, UnidadRegional } from '../features/ubicacion/types';
 import { MultiSelectPicker } from '../components/forms/MultiSelectPicker';
 import { findInfractorByDni } from '../services/InfractorService';
 import { HttpError } from '../api/http';
@@ -35,7 +28,7 @@ import { OcrService } from '../services/OcrService';
 import { actualizarActa, crearActa } from '../services/ActaService';
 import { AppButton } from '../components/ui/AppButton';
 import * as Location from 'expo-location';
-import { obtenerJuzgadosParaActas, type Juzgado } from '../services/JuzgadoService';
+import type { Juzgado } from '../services/JuzgadoService';
 import { styles } from '../components/ui/styles';
 import { SelectField } from '../components/ui/SelectedFieldString';
 import { Field } from '../components/ui/Field';
@@ -47,6 +40,9 @@ import { DateFieldString } from '../components/ui/SelectedFieldString';
 import { Divider } from 'react-native-paper';
 import { PickerField } from '../components/forms/PickerField';
 import { SkeletonForm } from '../components/ui/skeleton/SkeletonForm';
+import { siNo } from '../features/hechos-viales/generarTextoHechoVial';
+import { useCatalogos } from '../api/hooks/catalogos';
+import { TIPO_RODADO_ACTA } from '../features/hechos-viales/values';
 
 type ActaFormTabKey = 'acta' | 'infractor' | 'vehiculo' | 'firma';
 type DatePickerTarget = 'acta_fecha' | 'infractor_nacimiento' | 'licencia_expedicion' | 'licencia_vencimiento';
@@ -86,8 +82,7 @@ function createInitialActaForm(): ActaRequest {
       fechaNacimiento: '',
       localidad: '',
       provincia: '',
-      licencia: createBlankLicencia(),
-      propietario: false,
+      licencia: null,
     },
     vehiculo: {
       idVeh: undefined,
@@ -98,12 +93,19 @@ function createInitialActaForm(): ActaRequest {
       cuadro: '',
       tipoRodado: '',
       propietario: null,
+      infractorPropietario: false
     },
     adjunta: '',
     retencion: '',
-    retencionVehiculo: false,
+    observaciones: '',
+    alcoholimetro: {
+      idAlcoholimetro: 0,
+      idImpresora: 0,
+    },
     graduacionAlcoholica: 0,
     infractorFugado: false,
+    retencionLicencia: false,
+    seNiegaAFirmar: false,
     juzgado: undefined,
     ubicacionRequest: {
       lat: 0,
@@ -142,19 +144,15 @@ export function NuevaActaScreen({
   );
 
   const [formData, setFormData] = useState<ActaRequest>(() => createInitialActaForm());
+  const isEditingActa = !!editActa;
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [tipos, setTipos] = useState<Tipo[]>([{descripcion:'SERIE B', detalle:'SERIE B', idTipo: 2}]);
+  const [tipos, setTipos] = useState<Tipo[]>([]);
   const [puestos, setPuestos] = useState<Puesto[]>([]);
-  const [leyes, setLeyes] = useState<Ley[]>([]);
   const [juzgados, setJuzgados] = useState<Juzgado[]>([]);
-  const [articulosByLey, setArticulosByLey] = useState<Articulo[]>([]);
-  const [articulosById, setArticulosById] = useState<Record<number, Articulo>>({});
-  const [articuloLeyById, setArticuloLeyById] = useState<Record<number, number>>({});
-  const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(false);
-  const [catalogsError, setCatalogsError] = useState<string | null>(null);
-  const [isLoadingArticulos, setIsLoadingArticulos] = useState(false);
-  const [articulosError, setArticulosError] = useState<string | null>(null);
+  const { data: catalogos } = useCatalogos();
+  const isLoadingCatalogs = !catalogos;
+  const catalogsError = null;
 
   const idGrupo = formData.idGrupo || null;
   const setIdGrupo = (value: number | null) => {
@@ -175,8 +173,6 @@ export function NuevaActaScreen({
   const setIdActa = (value: number | null) => {
     setFormData((prev) => ({ ...prev, idActa: value ?? undefined }));
   };
-
-  const [idLey, setIdLey] = useState<number | null>(null);
   const fecha = formData.fecha;
   const setFecha = (value: string) => {
     setFormData((prev) => ({ ...prev, fecha: value }));
@@ -232,9 +228,9 @@ export function NuevaActaScreen({
     setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, provincia: value } }));
   };
 
-  const infractorPropietario = formData.infractor.propietario;
+  const infractorPropietario = formData.vehiculo.infractorPropietario;
   const setInfractorPropietario = (value: boolean) => {
-    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, propietario: value } }));
+    setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, infractorPropietario: value } }));
   };
 
   const infractorFechaNacimiento = formData.infractor.fechaNacimiento || '';
@@ -350,7 +346,16 @@ export function NuevaActaScreen({
       ...prev,
       vehiculo: {
         ...prev.vehiculo,
-        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), nombre: value },
+        propietario: {
+          ...(prev.vehiculo.propietario ?? {
+            nombre: '',
+            dni: '',
+            direccion: '',
+            localidad: '',
+            provincia: '',
+          }),
+          nombre: value,
+        },
       },
     }));
   };
@@ -361,7 +366,16 @@ export function NuevaActaScreen({
       ...prev,
       vehiculo: {
         ...prev.vehiculo,
-        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), apellido: value },
+        propietario: {
+          ...(prev.vehiculo.propietario ?? {
+            nombre: '',
+            dni: '',
+            direccion: '',
+            localidad: '',
+            provincia: '',
+          }),
+          apellido: value,
+        },
       },
     }));
   };
@@ -372,7 +386,16 @@ export function NuevaActaScreen({
       ...prev,
       vehiculo: {
         ...prev.vehiculo,
-        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), dni: value },
+        propietario: {
+          ...(prev.vehiculo.propietario ?? {
+            nombre: '',
+            dni: '',
+            direccion: '',
+            localidad: '',
+            provincia: '',
+          }),
+          dni: value,
+        },
       },
     }));
   };
@@ -383,7 +406,56 @@ export function NuevaActaScreen({
       ...prev,
       vehiculo: {
         ...prev.vehiculo,
-        propietario: { ...(prev.vehiculo.propietario ?? { nombre: '', dni: '', direccion: '' }), direccion: value },
+        propietario: {
+          ...(prev.vehiculo.propietario ?? {
+            nombre: '',
+            dni: '',
+            direccion: '',
+            localidad: '',
+            provincia: '',
+          }),
+          direccion: value,
+        },
+      },
+    }));
+  };
+
+  const propietarioLocalidad = formData.vehiculo.propietario?.localidad || '';
+  const setPropietarioLocalidad = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: {
+          ...(prev.vehiculo.propietario ?? {
+            nombre: '',
+            dni: '',
+            direccion: '',
+            localidad: '',
+            provincia: '',
+          }),
+          localidad: value,
+        },
+      },
+    }));
+  };
+
+  const propietarioProvincia = formData.vehiculo.propietario?.provincia || '';
+  const setPropietarioProvincia = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: {
+          ...(prev.vehiculo.propietario ?? {
+            nombre: '',
+            dni: '',
+            direccion: '',
+            localidad: '',
+            provincia: '',
+          }),
+          provincia: value,
+        },
       },
     }));
   };
@@ -423,8 +495,6 @@ export function NuevaActaScreen({
   const [ubicacionError, setUbicacionError] = useState<string | null>(null);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [unidadesRegionales, setUnidadesRegionales] = useState<UnidadRegional[]>([]);
-  const [localidades, setLocalidades] = useState<Localidad[]>([]);
   const ubicUnidadRegional = formData.ubicacionRequest.unidadRegional ?? null;
   const setUbicUnidadRegional = (value: number | null) => {
     setFormData((prev) => ({
@@ -441,9 +511,6 @@ export function NuevaActaScreen({
     }));
   };
 
-  const [isLoadingUr, setIsLoadingUr] = useState(false);
-  const [urError, setUrError] = useState<string | null>(null);
-
   const adjuntaSeleccionadas = useMemo(
     () => (formData.adjunta ? formData.adjunta.split(',').map((item) => item.trim()).filter(Boolean) : []),
     [formData.adjunta]
@@ -457,20 +524,77 @@ export function NuevaActaScreen({
     setFormData((prev) => ({ ...prev, retencion: value }));
   };
 
-  const retencionVehiculo = formData.retencionVehiculo;
-  const setRetencionVehiculo = (value: boolean) => {
-    setFormData((prev) => ({ ...prev, retencionVehiculo: value }));
+  const observaciones = formData.observaciones ?? '';
+  const setObservaciones = (value: string) => {
+    setFormData((prev) => ({ ...prev, observaciones: value }));
   };
 
-  const graduacionAlcoholica = String(formData.graduacionAlcoholica || '');
-  const setGraduacionAlcoholica = (value: string) => {
-    const parsed = Number(value.replace(',', '.'));
-    setFormData((prev) => ({ ...prev, graduacionAlcoholica: Number.isFinite(parsed) ? parsed : 0 }));
+  const alcoholimetroForm = formData.alcoholimetro ?? { idAlcoholimetro: 0, idImpresora: 0 };
+  const alcoholimetroId = alcoholimetroForm.idAlcoholimetro || null;
+  const setAlcoholimetroId = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      alcoholimetro: {
+        ...(prev.alcoholimetro ?? { idAlcoholimetro: 0, idImpresora: 0 }),
+        idAlcoholimetro: value ?? 0,
+      },
+    }));
+  };
+
+  const impresoraId = alcoholimetroForm.idImpresora || null;
+  const setImpresoraId = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      alcoholimetro: {
+        ...(prev.alcoholimetro ?? { idAlcoholimetro: 0, idImpresora: 0 }),
+        idImpresora: value ?? 0,
+      },
+    }));
+  };
+
+  useEffect(() => {
+    if (!editActa) return;
+    console.log('Editar acta: estado alcoholimetro/impresora', {
+      alcoholimetroId,
+      impresoraId,
+      alcoholimetroForm,
+    });
+  }, [editActa, alcoholimetroForm, alcoholimetroId, impresoraId]);
+
+  const [graduacionAlcoholica, setGraduacionAlcoholica] = useState(
+    formData.graduacionAlcoholica != null ? String(formData.graduacionAlcoholica) : ''
+  );
+
+  const handleChangeGraduacion = (value: string) => {
+    // normalizar coma a punto y permitir solo dígitos + un punto
+    let cleaned = value.replace(',', '.').replace(/[^0-9.]/g, '');
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    setGraduacionAlcoholica(cleaned);
+
+    const parsed = Number(cleaned);
+    setFormData((prev) => ({
+      ...prev,
+      graduacionAlcoholica: Number.isFinite(parsed) ? parsed : 0,
+    }));
   };
 
   const infractorFugado = formData.infractorFugado;
   const setInfractorFugado = (value: boolean) => {
     setFormData((prev) => ({ ...prev, infractorFugado: value }));
+  };
+
+  const retencionLicencia = formData.retencionLicencia ?? false;
+  const setRetencionLicencia = (value: boolean) => {
+    setFormData((prev) => ({ ...prev, retencionLicencia: value }));
+  };
+
+  const seNiegaAFirmar = formData.seNiegaAFirmar ?? false;
+  const setSeNiegaAFirmar = (value: boolean) => {
+    setFormData((prev) => ({ ...prev, seNiegaAFirmar: value }));
   };
 
   const juzgadoId = formData.juzgado ?? null;
@@ -479,9 +603,6 @@ export function NuevaActaScreen({
   };
 
   const [licencias, setLicencias] = useState<Licencia[]>([]);
-
-  const skipClearArticulosOnLeyChangeRef = useRef(false);
-  const pendingInferLeyArticulosRef = useRef<number[] | null>(null);
 
   const firmaTestigos = useMemo(
     () => normalizeTestigos(formData.testigos),
@@ -592,6 +713,16 @@ export function NuevaActaScreen({
       setSaveActaMessage('Falta seleccionar Juzgado.');
       return false;
     }
+    if (mostrarAlcoholimetroSection) {
+      if (!alcoholimetroId) {
+        setSaveActaMessage('Falta seleccionar Alcoholímetro.');
+        return false;
+      }
+      if (!impresoraId) {
+        setSaveActaMessage('Falta seleccionar Impresora.');
+        return false;
+      }
+    }
     if (!fecha.trim()) {
       setSaveActaMessage('Falta completar la Fecha.');
       return false;
@@ -688,10 +819,6 @@ export function NuevaActaScreen({
         setSaveActaMessage('Falta completar el Nombre del propietario.');
         return false;
       }
-      if (!propietarioApellido.trim()) {
-        setSaveActaMessage('Falta completar el Apellido del propietario.');
-        return false;
-      }
       if (!propietarioDni.trim()) {
         setSaveActaMessage('Falta completar el DNI del propietario.');
         return false;
@@ -716,139 +843,89 @@ export function NuevaActaScreen({
   }, [datePicker?.year, datePicker?.month]);
 
   useEffect(() => {
-    let isMounted = true;
+    setGrupos(catalogos?.grupos ?? []);
+    setPuestos(catalogos?.puestos ?? []);
+    setJuzgados(catalogos?.juzgados ?? []);
+    setTipos(catalogos?.tipos ?? []);
+  }, [catalogos]);
 
-    async function loadCatalogs() {
-      setCatalogsError(null);
-      setIsLoadingCatalogs(true);
-      try {
-        const [gruposRes, tiposRes, puestosRes, leyesRes, juzgadosRes] = await Promise.all([
-          getGrupos(jwt),
-          getAllTipoActas(jwt),
-          getPuestos(jwt),
-          getLeyes(jwt),
-          obtenerJuzgadosParaActas(jwt),
-        ]);
-        if (!isMounted) return;
-        setGrupos(gruposRes);
-        // Agregamos los tres puntos también a tiposRes
-        setTipos((prevTipos) => [...prevTipos, ...tiposRes]);
-        setPuestos(puestosRes);
-        setLeyes(leyesRes);
-        setJuzgados(juzgadosRes);
-      } catch (e) {
-        if (!isMounted) return;
-        setCatalogsError(e instanceof Error ? e.message : 'Error cargando catálogos');
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingCatalogs(false);
-      }
-    }
+  const mostrarAlcoholimetroSection = useMemo(() => {
+    return (catalogos?.articulos ?? []).some((a) => {
+      const nro = (a.nro ?? '').trim().toUpperCase();
+      return articulosSeleccionados.includes(a.idArt) && nro.includes('ART 2 Y 6');
+    });
+  }, [catalogos, articulosSeleccionados]);
 
-    loadCatalogs();
-    return () => {
-      isMounted = false;
-    };
-  }, [jwt]);
+  const ocultarLicenciaSection = useMemo(() => {
+    return (catalogos?.articulos ?? []).some((a) => {
+      const nro = (a.nro ?? '').trim().toUpperCase();
+      return articulosSeleccionados.includes(a.idArt) && nro === 'ART 40 INC A';
+    });
+  }, [catalogos, articulosSeleccionados]);
 
   useEffect(() => {
-    let isMounted = true;
+    if (mostrarAlcoholimetroSection) return;
+    if (isEditingActa) return;
+    if ((formData.alcoholimetro?.idAlcoholimetro ?? 0) === 0 && (formData.alcoholimetro?.idImpresora ?? 0) === 0) return;
+    setFormData((prev) => ({
+      ...prev,
+      alcoholimetro: {
+        ...(prev.alcoholimetro ?? { idAlcoholimetro: 0, idImpresora: 0 }),
+        idAlcoholimetro: 0,
+        idImpresora: 0,
+      },
+    }));
+  }, [formData.alcoholimetro, mostrarAlcoholimetroSection, isEditingActa]);
 
-    async function loadArticulosForLey() {
-      setArticulosError(null);
-      setArticulosByLey([]);
+  useEffect(() => {
+    if (!ocultarLicenciaSection) return;
+    if (!formData.infractor.licencia) return;
 
-      if (!idLey) {
-        return;
-      }
-
-      setIsLoadingArticulos(true);
-      try {
-        const data = await getArticulosByLey(idLey, jwt);
-        if (!isMounted) return;
-        setArticulosByLey(data);
-        setArticulosById((prev) => {
-          const next = { ...prev };
-          for (const a of data) next[a.idArt] = a;
-          return next;
-        });
-        setArticuloLeyById((prev) => {
-          const next = { ...prev };
-          for (const a of data) next[a.idArt] = idLey;
-          return next;
-        });
-      } catch (e) {
-        if (!isMounted) return;
-        setArticulosError(e instanceof Error ? e.message : 'Error cargando artÃ­culos');
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingArticulos(false);
-      }
-    }
-
-    loadArticulosForLey();
-    return () => {
-      isMounted = false;
-    };
-  }, [idLey, jwt]);
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        licencia: null,
+      },
+    }));
+  }, [formData.infractor.licencia, ocultarLicenciaSection]);
 
   useEffect(() => {
     if (!fecha) setFecha(formatNowAsDdMmYyyyHhMm());
   }, [fecha]);
 
-  useEffect(() => {
-    const pending = pendingInferLeyArticulosRef.current;
-    if (!pending || !pending.length) return;
-    if (!leyes.length) return;
-    pendingInferLeyArticulosRef.current = null;
-    void inferLeyForArticulos(pending);
-  }, [leyes, jwt]);
+  const unidadesRegionales = useMemo(() => {
+    if (!ubicDepartamento.trim()) return [];
+    return (catalogos?.unidadesRegionales ?? [])
+      .filter((ur) => ur.departamentos.some((depto) => depto.nombre === ubicDepartamento))
+      .map((ur) => ({ idUr: ur.idUr, nombre: ur.nombre }));
+  }, [catalogos, ubicDepartamento]);
+
+  const localidades = useMemo(() => {
+    if (!ubicDepartamento.trim()) return [];
+    const depto = (catalogos?.unidadesRegionales ?? [])
+      .flatMap((ur) => ur.departamentos)
+      .find((depto) => depto.nombre === ubicDepartamento);
+    return depto?.localidades ?? [];
+  }, [catalogos, ubicDepartamento]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadUnidadesRegionales() {
-      setUrError(null);
-      setUnidadesRegionales([]);
-      setLocalidades([]);
-      if (!ubicDepartamento) {
-        setUbicUnidadRegional(null);
-        setUbicLocalidad(null);
-        return;
-      }
-
-      setIsLoadingUr(true);
-      try {
-        const data = await obtenerUnidadesRegionalesPorDepartamento(ubicDepartamento, jwt);
-        if (!isMounted) return;
-        setUnidadesRegionales(data);
-      } catch (e) {
-        if (!isMounted) return;
-        setUrError(e instanceof Error ? e.message : 'Error cargando unidades regionales');
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingUr(false);
-      }
-    }
-
-    loadUnidadesRegionales();
-    return () => {
-      isMounted = false;
-    };
-  }, [jwt, ubicDepartamento]);
-
-  useEffect(() => {
-    if (!ubicUnidadRegional || !ubicDepartamento || !unidadesRegionales.length) {
-      setLocalidades([]);
+    if (!ubicDepartamento.trim()) {
+      if (ubicUnidadRegional !== null) setUbicUnidadRegional(null);
+      if (ubicLocalidad !== null) setUbicLocalidad(null);
       return;
     }
 
-    const depto = unidadesRegionales
-      .find((u) => u.idUr === ubicUnidadRegional)
-      ?.departamentos.find((d) => d.nombre === ubicDepartamento);
+    const unidadRegionalValida = unidadesRegionales.some((u) => u.idUr === ubicUnidadRegional);
+    if (!unidadRegionalValida && ubicUnidadRegional !== null) {
+      setUbicUnidadRegional(null);
+    }
 
-    setLocalidades(depto?.localidades ?? []);
-  }, [ubicDepartamento, ubicUnidadRegional, unidadesRegionales]);
+    const localidadValida = localidades.some((l) => l.id === ubicLocalidad);
+    if (!localidadValida && ubicLocalidad !== null) {
+      setUbicLocalidad(null);
+    }
+  }, [ubicDepartamento, ubicLocalidad, ubicUnidadRegional, localidades, unidadesRegionales]);
 
   const selectedTipo = useMemo(() => {
     if (idTipo == null) return null;
@@ -859,6 +936,8 @@ export function NuevaActaScreen({
     const label = `${selectedTipo?.detalle ?? ''} ${selectedTipo?.descripcion ?? ''}`.trim();
     return /automatico/i.test(label);
   }, [selectedTipo]);
+
+  const firmaHabilitada = infractorFugado || seNiegaAFirmar;
 
   useEffect(() => {
     if (isAutomaticTipo) setNro('');
@@ -886,15 +965,22 @@ export function NuevaActaScreen({
     setVehiculoDominio(selected.dominio ?? '');
     setVehiculoMarca(selected.marca ?? '');
     setVehiculoModelo(selected.modelo ?? '');
+    setVehiculoTipoRodado(selected.tipoRodado ?? '');
+    setInfractorPropietario(!!selected.infractorPropietario);
 
-    if (!infractorPropietario) {
+    if (!selected.infractorPropietario) {
       const prop = selected.propietario ?? null;
       setPropietarioNombre(prop?.nombre ?? '');
       setPropietarioApellido(prop?.apellido ?? '');
       setPropietarioDni(prop?.dni ?? '');
       setPropietarioDireccion(prop?.direccion ?? '');
+    } else {
+      setPropietarioNombre('');
+      setPropietarioApellido('');
+      setPropietarioDni('');
+      setPropietarioDireccion('');
     }
-  }, [infractorPropietario, vehiculoSeleccionadoId, vehiculosEncontrados]);
+  }, [vehiculoSeleccionadoId, vehiculosEncontrados]);
 
   async function fetchInfractorByDni() {
     const dni = infractorDni.trim();
@@ -928,16 +1014,45 @@ export function NuevaActaScreen({
       setInfractorLocalidad((data.localidad ?? '') || '');
       setInfractorProvincia((data.provincia ?? '') || '');
       setInfractorFechaNacimiento(data.fechaNacimiento ?? '');
-      setInfractorPropietario(isInfractorOwner);
 
       setVehiculosEncontrados(vehiculosFromBackend);
-      setVehiculoSeleccionadoId(vehiculosFromBackend.length === 1 ? vehiculosFromBackend[0]?.idVeh ?? null : null);
-      // Se completa el formulario de vehiculo recien cuando se selecciona uno
-      setVehiculoIdVeh(null);
-      setVehiculoDominio('');
-      setVehiculoMarca('');
-      setVehiculoModelo('');
-      setVehiculoTipoRodado('')
+      const autoSelectedVehiculo =
+        vehiculosFromBackend.length === 1 ? vehiculosFromBackend[0] ?? null : null;
+      setVehiculoSeleccionadoId(autoSelectedVehiculo?.idVeh ?? null);
+
+      if (autoSelectedVehiculo) {
+        setVehiculoIdVeh(autoSelectedVehiculo.idVeh ?? null);
+        setVehiculoDominio(autoSelectedVehiculo.dominio ?? '');
+        setVehiculoMarca(autoSelectedVehiculo.marca ?? '');
+        setVehiculoModelo(autoSelectedVehiculo.modelo ?? '');
+        setVehiculoTipoRodado(autoSelectedVehiculo.tipoRodado ?? '');
+        setInfractorPropietario(!!autoSelectedVehiculo.infractorPropietario);
+
+        if (autoSelectedVehiculo.infractorPropietario) {
+          setPropietarioNombre('');
+          setPropietarioApellido('');
+          setPropietarioDni('');
+          setPropietarioDireccion('');
+          setPropietarioLocalidad('');
+          setPropietarioProvincia('');
+        } else {
+          const prop = autoSelectedVehiculo.propietario ?? null;
+          setPropietarioNombre(prop?.nombre ?? '');
+          setPropietarioApellido(prop?.apellido ?? '');
+          setPropietarioDni(prop?.dni ?? '');
+          setPropietarioDireccion(prop?.direccion ?? '');
+          setPropietarioLocalidad(prop?.localidad ?? '');
+          setPropietarioProvincia(prop?.provincia ?? '');
+        }
+      } else {
+        // Se completa el formulario de vehiculo recien cuando se selecciona uno
+        setVehiculoIdVeh(null);
+        setVehiculoDominio('');
+        setVehiculoMarca('');
+        setVehiculoModelo('');
+        setVehiculoTipoRodado('');
+        setInfractorPropietario(isInfractorOwner);
+      }
 
       setInfractorSearchMessage('Infractor encontrado.');
     } catch (e) {
@@ -950,37 +1065,6 @@ export function NuevaActaScreen({
     } finally {
       setIsSearchingInfractor(false);
     }
-  }
-
-  async function inferLeyForArticulos(articuloIds: number[]) {
-    const ids = (articuloIds ?? []).filter((n) => Number.isFinite(n));
-    if (!ids.length) {
-      setIdLey(null);
-      return;
-    }
-    if (!leyes.length) {
-      pendingInferLeyArticulosRef.current = ids;
-      return;
-    }
-
-    console.log('Inferir ley para artículos', ids);
-    for (const ley of leyes) {
-      try {
-        const arts = await getArticulosByLey(ley.idLey, jwt);
-        const allowed = new Set(arts.map((a) => a.idArt));
-        const matches = ids.every((id) => allowed.has(id));
-        if (matches) {
-          skipClearArticulosOnLeyChangeRef.current = true;
-          setIdLey(ley.idLey);
-          console.log('Ley inferida', { idLey: ley.idLey, nro: ley.nro });
-          return;
-        }
-      } catch {
-        // ignora y sigue probando
-      }
-    }
-
-    setArticulosError('No se pudo determinar la ley para los artículos del acta. Seleccionala manualmente.');
   }
 
   async function obtenerUbicacionActual() {
@@ -1035,11 +1119,12 @@ export function NuevaActaScreen({
   }
 
   async function guardarActa() {
-    //setSaveActaMessage(null);
+    setSaveActaMessage(null);
+    console.log('ActaRequest (draft):', actaDraft);
 
     if (!validateActa()) return;
 
-    if (infractorFugado) {
+    if (firmaHabilitada) {
       const normalized = firmaTestigos.map((t) => ({
         nombre: (t.nombre ?? '').trim(),
         apellido: (t.apellido ?? '').trim(),
@@ -1051,7 +1136,7 @@ export function NuevaActaScreen({
       if (!isValid) {
         setTab('firma');
         setSaveActaMessage(
-          'Si el infractor está fugado, debe cargar exactamente 2 testigos (nombre, apellido y DNI).'
+          'Si el infractor fue marcado como fugado o se niega a firmar, debe cargar exactamente 2 testigos (nombre, apellido y DNI).'
         );
         return;
       }
@@ -1059,7 +1144,6 @@ export function NuevaActaScreen({
 
     setIsSavingActa(true);
     try {
-      console.log('ActaRequest (draft):', actaDraft);
       const saved = isEditing
         ? await actualizarActa(actaDraft as ActaRequest, jwt)
         : await crearActa(actaDraft as ActaRequest, jwt);
@@ -1095,13 +1179,9 @@ export function NuevaActaScreen({
     setNro(editActa.nro ?? '');
     setJuzgadoId(editActa.juzgado ?? null)
     setInfractorFugado(editActa.infractorFugado)
-    setRetencionVehiculo(editActa.retencionVehiculo ?? false)
-    pendingInferLeyArticulosRef.current = (editActa.articulos ?? []).length ? (editActa.articulos ?? []) : null;
-    setIdLey(null);
+    setRetencionLicencia(!!editActa.retencionLicencia);
+    setSeNiegaAFirmar(editActa.seNiegaAFirmar)
     setArticulosSeleccionados(editActa.articulos ?? []);
-    if ((editActa.articulos ?? []).length) {
-      void inferLeyForArticulos(editActa.articulos ?? []);
-    }
 
     setAdjuntaSeleccionadas(
       (editActa.adjunta ?? '')
@@ -1110,8 +1190,15 @@ export function NuevaActaScreen({
         .filter(Boolean)
     );
     setRetencion(editActa.retencion ?? '');
-    setRetencionVehiculo(!!editActa.retencionVehiculo);
+    setObservaciones((editActa as any).observaciones ?? '');
     setGraduacionAlcoholica(editActa.graduacionAlcoholica ? String(editActa.graduacionAlcoholica) : '');
+    console.log('Editar acta: ids de alcoholimetro/impresora recibidos', {
+      rawAlcoholimetro: editActa.alcoholimetro,
+      idAlcoholimetro: editActa.alcoholimetro?.idAlcoholimetro,
+      idImpresora: editActa.alcoholimetro?.idImpresora,
+    });
+    setAlcoholimetroId(editActa.alcoholimetro?.idAlcoholimetro ?? null);
+    setImpresoraId(editActa.alcoholimetro?.idImpresora ?? null);
     setInfractorFugado(!!editActa.infractorFugado);
     const juzgadoRaw = (editActa as any)?.juzgado;
     setJuzgadoId(typeof juzgadoRaw === 'number' && juzgadoRaw > 0 ? juzgadoRaw : null);
@@ -1140,7 +1227,7 @@ export function NuevaActaScreen({
     //setInfractorPropietario(inf.pr);
     
     setVehiculosEncontrados([]);
-    setVehiculoSeleccionadoId(null);
+    setVehiculoSeleccionadoId(veh?.idVeh ?? null);
     setVehiculoIdVeh(veh?.idVeh ?? null);
     setVehiculoDominio(veh?.dominio ?? '');
     setVehiculoMarca((veh?.marca ?? '') as any);
@@ -1151,6 +1238,8 @@ export function NuevaActaScreen({
     setPropietarioApellido(prop?.apellido ?? '');
     setPropietarioDni(prop?.dni ?? '');
     setPropietarioDireccion(prop?.direccion ?? '');
+    setPropietarioLocalidad(prop?.localidad ?? '');
+    setPropietarioProvincia(prop?.provincia ?? '');
     setFormData((prevData) => ({
       ...prevData,
       testigos: editActa.testigos ?? [],
@@ -1235,7 +1324,7 @@ export function NuevaActaScreen({
         setVehiculoTipoRodado(data.tipoRodado ?? ''); const prop = (data as any).propietario ?? null; 
         if (!infractorPropietario && prop) { setPropietarioNombre(prop.nombre ?? ''); 
           setPropietarioApellido(prop.apellido ?? ''); setPropietarioDni(prop.dni ?? ''); 
-          setPropietarioDireccion(prop.direccion ?? ''); } setOcrCedulaFrenteMessage('Cédula (frente) procesada.'); } catch (e) { console.log('OCR cedulaFrente: error', e); setOcrCedulaFrenteMessage(formatOcrError('cédula (frente)', e, cedulaFrenteFoto)); } finally { setIsOcrCedulaFrenteBusy(false); } }
+          setPropietarioDireccion(prop.direccion ?? ''); setPropietarioLocalidad(prop.localidad ?? ''); setPropietarioProvincia(prop.provincia ?? ''); } setOcrCedulaFrenteMessage('Cédula (frente) procesada.'); } catch (e) { console.log('OCR cedulaFrente: error', e); setOcrCedulaFrenteMessage(formatOcrError('cédula (frente)', e, cedulaFrenteFoto)); } finally { setIsOcrCedulaFrenteBusy(false); } }
 
   async function procesarCedulaDorso() {
     if (!cedulaDorsoFoto) return;
@@ -1286,11 +1375,14 @@ export function NuevaActaScreen({
     setVehiculoDominio('');
     setVehiculoMarca('');
     setVehiculoModelo('');
+    setVehiculoTipoRodado('');
+    setPropietarioLocalidad('');
+    setPropietarioProvincia('');
   }
 
   const testigosActa = useMemo(
     () =>
-      (infractorFugado
+      (firmaHabilitada
         ? firmaTestigos.map((t) => ({
             nombre: (t.nombre ?? '').trim(),
             apellido: (t.apellido ?? '').trim(),
@@ -1298,7 +1390,7 @@ export function NuevaActaScreen({
             domicilio: (t.domicilio ?? '').trim() || undefined,
           }))
         : []) as ActaRequest['testigos'],
-    [firmaTestigos, infractorFugado]
+    [firmaHabilitada, firmaTestigos]
   );
 
   /*
@@ -1343,13 +1435,10 @@ export function NuevaActaScreen({
   */
 
   const requiresGraduacionAlcoholica = useMemo(() => {
-    for (const id of articulosSeleccionados) {
-      const a = articulosById[id];
-      if (!a) continue;
-      if ((a.nro ?? '').trim() === 'ART 2 Y 6') return true;
-    }
-    return false;
-  }, [articulosById, articulosSeleccionados]);
+    return (catalogos?.articulos ?? []).some(
+      (a) => articulosSeleccionados.includes(a.idArt) && (a.nro ?? '').trim().toUpperCase().includes('ART 2 Y 6')
+    );
+  }, [catalogos, articulosSeleccionados]);
 
   const graduacionAlcoholicaValue = useMemo(() => {
     if (!requiresGraduacionAlcoholica) return graduacionAlcoholica;
@@ -1399,6 +1488,8 @@ export function NuevaActaScreen({
   setPropietarioApellido("");
   setPropietarioDni("");
   setPropietarioDireccion("");
+  setPropietarioLocalidad("");
+  setPropietarioProvincia("");
 
   // Ubicación
   setUbicLat('');
@@ -1409,11 +1500,14 @@ export function NuevaActaScreen({
   setUbicDescripcion('');
 
   // Otros y Firma
-  setAdjuntaSeleccionadas([]);
-  setRetencion('');
-  setRetencionVehiculo(false);
-  setGraduacionAlcoholica('');
+    setAdjuntaSeleccionadas([]);
+    setRetencion('');
+    setObservaciones('');
+    setAlcoholimetroId(null);
+    setImpresoraId(null);
+    setGraduacionAlcoholica('');
   setInfractorFugado(false);
+  setSeNiegaAFirmar(false)
   setFirmaTestigos([
     { nombre: '', apellido: '', dni: '', domicilio: '' },
     { nombre: '', apellido: '', dni: '', domicilio: '' },
@@ -1461,6 +1555,8 @@ export function NuevaActaScreen({
       propietarioApellido,
       propietarioDni,
       propietarioDireccion,
+      propietarioLocalidad,
+      propietarioProvincia,
       ubicLat,
       ubicLng,
       ubicDepartamento,
@@ -1469,9 +1565,13 @@ export function NuevaActaScreen({
       ubicDescripcion,
       adjunta: adjuntaSeleccionadas,
       retencion,
-      retencionVehiculo,
+      observaciones,
+      alcoholimetroId,
+      impresoraId,
       graduacionAlcoholica: Number(graduacionAlcoholicaValue),
       infractorFugado,
+      retencionLicencia,
+      seNiegaAFirmar,
       juzgado: juzgadoId,
       testigos: testigosActa,
     });
@@ -1509,6 +1609,8 @@ export function NuevaActaScreen({
     propietarioApellido,
     propietarioDni,
     propietarioDireccion,
+    propietarioLocalidad,
+    propietarioProvincia,
     ubicLat,
     ubicLng,
     ubicDepartamento,
@@ -1517,9 +1619,13 @@ export function NuevaActaScreen({
     ubicDescripcion,
     adjuntaSeleccionadas,
     retencion,
-    retencionVehiculo,
+    observaciones,
+    alcoholimetroId,
+    impresoraId,
     graduacionAlcoholicaValue,
     infractorFugado,
+    retencionLicencia,
+    seNiegaAFirmar,
     juzgadoId,
     testigosActa,
   ]);
@@ -1530,6 +1636,55 @@ export function NuevaActaScreen({
     () => grupos.map((g) => ({ value: g.idGrupo, label: g.nombre })),
     [grupos]
   );
+  const alcoholimetroOptions = useMemo(
+    () =>
+      (catalogos?.alcoholimetros ?? [])
+        .filter((a) => a.idAlcoholimetro != null)
+        .map((a) => ({
+          value: a.idAlcoholimetro,
+          label: a.numeroSerieAlcoholimetro,
+        })),
+    [catalogos]
+  );
+  const impresoraOptions = useMemo(() => {
+    const byId = new Map<number, { value: number; label: string }>();
+    for (const alcoholimetro of catalogos?.alcoholimetros ?? []) {
+      if (alcoholimetro.idImpresora == null) continue;
+      if (!byId.has(alcoholimetro.idImpresora)) {
+        byId.set(alcoholimetro.idImpresora, {
+          value: alcoholimetro.idImpresora,
+          label: alcoholimetro.numeroSerieImpresora ?? `Impresora ${alcoholimetro.idImpresora}`,
+        });
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [catalogos]);
+  const alcoholimetroImpresoraPairOptions = useMemo(() => {
+    const byPair = new Map<string, { value: string; label: string }>();
+    for (const item of catalogos?.alcoholimetros ?? []) {
+      if (item.idAlcoholimetro == null || item.idImpresora == null) continue;
+      const value = `${item.idAlcoholimetro}:${item.idImpresora}`;
+      if (byPair.has(value)) continue;
+      byPair.set(value, {
+        value,
+        label: `${item.numeroSerieAlcoholimetro} - ${item.numeroSerieImpresora ?? `Impresora ${item.idImpresora}`}`,
+      });
+    }
+    return Array.from(byPair.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [catalogos]);
+  const alcoholimetroImpresoraPairValue = useMemo(() => {
+    if (!alcoholimetroId || !impresoraId) return null;
+    return `${alcoholimetroId}:${impresoraId}`;
+  }, [alcoholimetroId, impresoraId]);
+  const setAlcoholimetroImpresoraPairValue = (value: string | null) => {
+    if (!value) return;
+    const [alcoholimetroRaw, impresoraRaw] = value.split(':');
+    const nextAlcoholimetroId = Number(alcoholimetroRaw);
+    const nextImpresoraId = Number(impresoraRaw);
+    if (!Number.isFinite(nextAlcoholimetroId) || !Number.isFinite(nextImpresoraId)) return;
+    setAlcoholimetroId(nextAlcoholimetroId);
+    setImpresoraId(nextImpresoraId);
+  };
   const tipoOptions = useMemo(
     () => tipos.map((t) => ({ value: t.idTipo, label: t.detalle || t.descripcion || `Tipo ${t.idTipo}` })),
     [tipos]
@@ -1538,7 +1693,6 @@ export function NuevaActaScreen({
     () => puestos.map((p) => ({ value: p.idPuesto, label: p.nombre })),
     [puestos]
   );
-  const leyOptions = useMemo(() => leyes.map((l) => ({ value: l.idLey, label: l.nro })), [leyes]);
   const juzgadoOptions = useMemo(
     () =>
       juzgados
@@ -1547,18 +1701,9 @@ export function NuevaActaScreen({
     [juzgados]
   );
   const articulosOptions = useMemo(() => {
-    if (!idLey) return [];
-    const base = articulosByLey;
-    const selectedExtra = articulosSeleccionados
-      .map((id) => articulosById[id])
-      .filter((a): a is Articulo => Boolean(a));
-
+    const base = catalogos?.articulos ?? [];
     const byId = new Map<number, Articulo>();
     for (const a of base) byId.set(a.idArt, a);
-    for (const a of selectedExtra) {
-      const leyForArticulo = articuloLeyById[a.idArt];
-      if (leyForArticulo === idLey) byId.set(a.idArt, a);
-    }
 
     const list = Array.from(byId.values());
     list.sort((a, b) => {
@@ -1567,30 +1712,7 @@ export function NuevaActaScreen({
       return (a.detalle ?? '').localeCompare(b.detalle ?? '');
     });
     return list;
-  }, [articuloLeyById, articulosById, articulosByLey, articulosSeleccionados, idLey]);
-
-  const articulosSeleccionadosForLey = useMemo(() => {
-    if (!idLey) return [];
-    return articulosSeleccionados.filter((id) => articuloLeyById[id] === idLey);
-  }, [articuloLeyById, articulosSeleccionados, idLey]);
-
-  const handleArticulosChangeForLey = (nextForLey: number[]) => {
-    if (!idLey) return;
-    const prevForLeySet = new Set(articulosSeleccionadosForLey);
-    const nextForLeySet = new Set(nextForLey);
-
-    const keepOther = articulosSeleccionados.filter((id) => articuloLeyById[id] !== idLey);
-    setArticulosSeleccionados([...keepOther, ...Array.from(nextForLeySet)]);
-
-    setArticuloLeyById((prev) => {
-      const next = { ...prev };
-      for (const id of nextForLeySet) next[id] = idLey;
-      for (const id of prevForLeySet) {
-        if (!nextForLeySet.has(id) && next[id] === idLey) delete next[id];
-      }
-      return next;
-    });
-  };
+  }, [catalogos]);
   const motivoOptions = useMemo(
     () =>
       [
@@ -1626,16 +1748,16 @@ export function NuevaActaScreen({
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
     >
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingBottom: 180 + insets.bottom }]}
+        contentContainerStyle={[styles.container, { paddingBottom: 280 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
       <Text style={styles.title}>NUEVA ACTA</Text>
 
-      <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={!infractorFugado} />
+      <ActaTabs tab={tab} onChangeTab={setTab} disableFirma={!firmaHabilitada} />
 
       <View style={{ gap: 8 }}>
         <AppButton
@@ -1652,9 +1774,9 @@ export function NuevaActaScreen({
         ) : null}
       </View>
 
-      {infractorFugado ? (
+      {firmaHabilitada ? (
         <Text style={styles.helperText}>
-          Infractor fugado activo: en la pestaña de firma solo se cargarán los dos testigos.
+          La solapa de firma se habilitó porque el infractor fue marcado como fugado o se negó a firmar.
         </Text>
       ) : null}
 
@@ -1700,9 +1822,17 @@ export function NuevaActaScreen({
             disabled={isLoadingCatalogs}
             allowClear
           />
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>infractor fugado</Text>
+          <View style={[styles.switchRow]}>
+            <Text style={styles.switchLabel}>Infractor fugado: {siNo(infractorFugado)}</Text>
             <Switch value={infractorFugado} onValueChange={(value) => setInfractorFugado(value)} />
+          </View>
+          <View style={[styles.switchRow]}>
+            <Text style={styles.switchLabel}>Retención licencia: {siNo(retencionLicencia)}</Text>
+            <Switch value={retencionLicencia} onValueChange={(value) => setRetencionLicencia(value)} />
+          </View>
+          <View style={[styles.switchRow]}>
+            <Text style={styles.switchLabel}>Se niega a firmar: {siNo(seNiegaAFirmar)}</Text>
+            <Switch value={seNiegaAFirmar} onValueChange={(value) => setSeNiegaAFirmar(value)} />
           </View>
           <PickerField
             label="fecha"
@@ -1730,48 +1860,59 @@ export function NuevaActaScreen({
             />
             {isAutomaticTipo ? <Text style={styles.helperText}>Se genera automáticamente</Text> : null}
           </View>
-          <SelectField
-            label="Ley"
-            placeholder="Selecciona una ley"
-            value={idLey}
-            options={leyOptions}
-            onChangeValue={setIdLey}
-            disabled={isLoadingCatalogs}
-            allowClear
+          <MultiSelectPicker
+            label="Articulos"
+            placeholder="Seleccionar articulos"
+            values={articulosSeleccionados}
+            options={(catalogos?.articulos ?? []).slice().sort((a, b) => {
+              const an = (a.nro ?? '').localeCompare(b.nro ?? '');
+              if (an !== 0) return an;
+              return (a.detalle ?? '').localeCompare(b.detalle ?? '');
+            }).map((a) => ({ value: a.idArt, label: `${a.nro}: ${a.detalle}` }))}
+            onChangeValues={setArticulosSeleccionados}
+            searchable
+            searchPlaceholder="Buscar por nro"
+            minListHeight={280}
           />
 
-          {isLoadingArticulos ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator />
-              <Text style={styles.loadingText}>Cargando arti­culos...</Text>
+          {mostrarAlcoholimetroSection ? (
+            <View style={{ gap: 10 }}>
+              <SelectFieldString
+                label="Pares"
+                placeholder="Seleccioná un par rápido"
+                value={alcoholimetroImpresoraPairValue}
+                options={alcoholimetroImpresoraPairOptions}
+                onChangeValue={setAlcoholimetroImpresoraPairValue}
+                disabled={isLoadingCatalogs}
+                allowClear
+              />
+              <SelectField
+                label="Alcoholímetro"
+                placeholder="Seleccioná un alcoholímetro"
+                value={alcoholimetroId}
+                options={alcoholimetroOptions}
+                onChangeValue={setAlcoholimetroId}
+                disabled={isLoadingCatalogs}
+              />
+              <SelectField
+                label="Impresora"
+                placeholder="Seleccioná una impresora"
+                value={impresoraId}
+                options={impresoraOptions}
+                onChangeValue={setImpresoraId}
+                disabled={isLoadingCatalogs}
+              />
             </View>
           ) : null}
 
-          {articulosError ? <Text style={styles.errorText}>{articulosError}</Text> : null}
-
-          {articulosOptions.length > 0 ? (
-            <MultiSelectPicker
-              label="Articulos"
-              placeholder="Seleccionar arti­culos"
-              values={articulosSeleccionadosForLey}
-              options={articulosOptions.map((a) => ({ value: a.idArt, label: `${a.nro}: ${a.detalle}` }))}
-              onChangeValues={handleArticulosChangeForLey}
-            />
-          ) : null}
-
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Retencion de vehi­culo</Text>
-            <Switch value={retencionVehiculo} onValueChange={setRetencionVehiculo} />
-          </View>
-
           {requiresGraduacionAlcoholica ? (
             <Field
-              label="graduacion alcoholica"
-              value={graduacionAlcoholica}
-              onChangeText={setGraduacionAlcoholica}
-              placeholder="0.00"
-              keyboardType="numeric"
-            />
+          label="graduación alcohólica"
+          value={graduacionAlcoholica}
+          onChangeText={handleChangeGraduacion}
+          placeholder="0.00"
+          keyboardType="numeric"
+        />
           ) : null}
         </Section>
       ) : null}
@@ -1785,9 +1926,9 @@ export function NuevaActaScreen({
           ubicLocalidad={ubicLocalidad}
           ubicDescripcion={ubicDescripcion}
           isLocating={isLocating}
-          isLoadingUr={isLoadingUr}
           ubicacionError={ubicacionError}
-          urError={urError}
+          isLoadingUr={false}
+          urError={null}
           unidadesRegionales={unidadesRegionales}
           localidades={localidades}
           setIsMapOpen={setIsMapOpen}
@@ -1825,12 +1966,18 @@ export function NuevaActaScreen({
       />
 
       {tab === 'acta' ? (
-        <Section title="Otros">
+        <Section title="Datos adicionales">
           <Field
-            label="retencion"
+            label="Nro. de acta de retencion"
             value={retencion}
             onChangeText={setRetencion}
             placeholder="(por ahora texto simple)"
+          />
+          <Field
+            label="observaciones"
+            value={observaciones}
+            onChangeText={setObservaciones}
+            placeholder="Agregá observaciones"
           />
         </Section>
       ) : null}
@@ -1868,6 +2015,8 @@ export function NuevaActaScreen({
             {infractorSearchMessage ? <Text style={styles.helperText}>{infractorSearchMessage}</Text> : null}
           </View>
 
+          {!ocultarLicenciaSection ? (
+            <>
           {adjuntaSeleccionadas.includes('LICENCIA NACIONAL DE CONDUCIR') && (
               <>
                 <PhotoPicker label="Licencia nacional (foto)" value={licenciaNacFoto} onChange={setLicenciaNacFoto} />
@@ -1964,6 +2113,8 @@ export function NuevaActaScreen({
                 onPress={() => openDatePicker('licencia_vencimiento', 'date', licenciaFechaVencimiento)}
               />
             </>
+            </>
+          ) : null}
           </View>
           <Field label="nombre" value={infractorNombre} onChangeText={setInfractorNombre} />
           <Field label="apellido" value={infractorApellido} onChangeText={setInfractorApellido} />
@@ -1989,6 +2140,7 @@ export function NuevaActaScreen({
 
       {tab === 'vehiculo' ? (
         <Section title="Vehículo">
+          {/*
           <View style={{ gap: 10 }}>
             <Text style={styles.sectionTitle}>Cédula</Text>
             <PhotoPicker label="Cédula (frente)" value={cedulaFrenteFoto} onChange={setCedulaFrenteFoto} />
@@ -2027,6 +2179,7 @@ export function NuevaActaScreen({
               </>
             ) : null}
           </View>
+          */}
 
           {vehiculosEncontrados.length ? (
             <View style={{ gap: 8 }}>
@@ -2043,7 +2196,27 @@ export function NuevaActaScreen({
                 return (
                   <Pressable
                     key={v.idVeh}
-                    onPress={() => setVehiculoSeleccionadoId(v.idVeh)}
+                    onPress={() => {
+                      setVehiculoSeleccionadoId(v.idVeh);
+                      setVehiculoIdVeh(v.idVeh ?? null);
+                      setVehiculoDominio(dominio);
+                      setVehiculoMarca(marca);
+                      setVehiculoModelo(modelo);
+                      setVehiculoTipoRodado(v.tipoRodado ?? '');
+                      setInfractorPropietario(v.infractorPropietario);
+
+                      if (v.propietario) {
+                        setPropietarioNombre(v.propietario.nombre ?? '');
+                        setPropietarioApellido(v.propietario.apellido ?? '');
+                        setPropietarioDni(v.propietario.dni ?? '');
+                        setPropietarioDireccion(v.propietario.direccion ?? '');
+                      } else {
+                        setPropietarioNombre('');
+                        setPropietarioApellido('');
+                        setPropietarioDni('');
+                        setPropietarioDireccion('');
+                      }
+                    }}
                     style={[styles.optionRow, isSelected ? styles.optionRowActive : null]}
                   >
                     <Text style={styles.optionText}>{isSelected ? `(x) ${label}` : `( ) ${label}`}</Text>
@@ -2083,13 +2256,13 @@ export function NuevaActaScreen({
           )}
 
           <Field label="dominio" value={vehiculoDominio} onChangeText={setVehiculoDominio} />
-          <Field label="marca (opcional)" value={vehiculoMarca} onChangeText={setVehiculoMarca} />
-          <Field label="modelo (opcional)" value={vehiculoModelo} onChangeText={setVehiculoModelo} />
+          <Field label="marca" value={vehiculoMarca} onChangeText={setVehiculoMarca} />
+          <Field label="modelo" value={vehiculoModelo} onChangeText={setVehiculoModelo} />
           <SelectFieldString
-              label="Tipo de rodado (opcional)"
+              label="Tipo de rodado"
               placeholder="Seleccionar tipo"
               value={vehiculoTipoRodado}
-              options={TIPOS_INVOLUCRADOS.map((tipo) => ({
+              options={TIPO_RODADO_ACTA.map((tipo) => ({
                 value: tipo,
                 label: tipo,
               }))}
@@ -2097,12 +2270,13 @@ export function NuevaActaScreen({
               onChangeValue={(val) => setVehiculoTipoRodado(val ?? '')}
             />
           <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>infractor es propietario</Text>
+            <Text style={styles.switchLabel}>infractor es propietario: {siNo(infractorPropietario)}</Text>
             <Switch value={infractorPropietario} onValueChange={setInfractorPropietario} />
           </View>
           {!infractorPropietario ? (
             <View style={{ gap: 10 }}>
               <Text style={styles.sectionTitle}>Propietario</Text>
+              {/*
               <PhotoPicker label="Cedula (dorso)" value={cedulaDorsoFoto} onChange={setCedulaDorsoFoto} />
               <AppButton
                 title="Procesar"
@@ -2116,10 +2290,13 @@ export function NuevaActaScreen({
                 <Text style={(ocrCedulaDorsoMessage ?? '').includes('HTTP') ? styles.errorText : styles.helperText}>
                   {ocrCedulaDorsoMessage}
                 </Text>
-              ) : null}
+              ) : null}*/
+              }
               <Field label="apellido y nombre" value={propietarioNombre} onChangeText={setPropietarioNombre} />
               <Field label="dni" value={propietarioDni} onChangeText={setPropietarioDni} keyboardType="numeric" />
               <Field label="direccion" value={propietarioDireccion} onChangeText={setPropietarioDireccion} />
+              <Field label="localidad" value={propietarioLocalidad} onChangeText={setPropietarioLocalidad} />
+              <Field label="provincia" value={propietarioProvincia} onChangeText={setPropietarioProvincia} />
             </View>
           ) : null}
         </Section>
@@ -2127,7 +2304,7 @@ export function NuevaActaScreen({
 
       {tab === 'firma' ? (
         <Section title="Firma">
-          {infractorFugado ? (
+          {firmaHabilitada ? (
             <View style={{ gap: 12 }}>
               <Text style={styles.sectionTitle}>Testigo 1</Text>
               <Field
@@ -2145,11 +2322,6 @@ export function NuevaActaScreen({
                 value={firmaTestigos[0].dni ?? ''}
                 onChangeText={(v) => updateFirmaTestigo(0, { dni: v })}
                 keyboardType="numeric"
-              />
-              <Field
-                label="domicilio"
-                value={firmaTestigos[0].domicilio ?? ''}
-                onChangeText={(v) => updateFirmaTestigo(0, { domicilio: v })}
               />
               <Divider />
               <Text style={styles.sectionTitle}>Testigo 2</Text>
@@ -2169,15 +2341,10 @@ export function NuevaActaScreen({
                 onChangeText={(v) => updateFirmaTestigo(1, { dni: v })}
                 keyboardType="numeric"
               />
-              <Field
-                label="domicilio (opcional)"
-                value={firmaTestigos[1].domicilio ?? ''}
-                onChangeText={(v) => updateFirmaTestigo(1, { domicilio: v })}
-              />
             </View>
           ) : (
             <Text style={styles.helperText}>
-              Para habilitar esta solapa, marcá el infractor como fugado en el formulario del acta.
+              Para habilitar esta solapa, marcó el infractor como fugado o como que se niega a firmar en el formulario del acta.
             </Text>
           )}
 
@@ -2212,11 +2379,6 @@ export function NuevaActaScreen({
                 onChangeText={(v) => updateFirmaTestigo(0, { dni: v })}
                 keyboardType="numeric"
               />
-              <Field
-                label="domicilio"
-                value={firmaTestigos[0].domicilio ?? ''}
-                onChangeText={(v) => updateFirmaTestigo(0, { domicilio: v })}
-              />
 
               <Text style={styles.sectionTitle}>Testigo 2</Text>
               <Field
@@ -2234,11 +2396,6 @@ export function NuevaActaScreen({
                 value={firmaTestigos[1].dni ?? ''}
                 onChangeText={(v) => updateFirmaTestigo(1, { dni: v })}
                 keyboardType="numeric"
-              />
-              <Field
-                label="domicilio (opcional)"
-                value={firmaTestigos[1].domicilio ?? ''}
-                onChangeText={(v) => updateFirmaTestigo(1, { domicilio: v })}
               />
             </View>
           ) : null}
@@ -2582,6 +2739,8 @@ function buildActaRequestSafe(input: {
   propietarioApellido: string;
   propietarioDni: string;
   propietarioDireccion: string;
+  propietarioLocalidad: string;
+  propietarioProvincia: string;
   ubicLat: string;
   ubicLng: string;
   ubicDepartamento: string;
@@ -2590,9 +2749,13 @@ function buildActaRequestSafe(input: {
   ubicDescripcion: string;
   adjunta: string[];
   retencion: string;
-  retencionVehiculo: boolean;
+  observaciones: string;
+  alcoholimetroId: number | null;
+  impresoraId: number | null;
   graduacionAlcoholica: number;
   infractorFugado: boolean;
+  retencionLicencia: boolean;
+  seNiegaAFirmar: boolean
   juzgado: number | null;
   testigos: ActaRequest['testigos'];
 }): Partial<ActaRequest> {
@@ -2601,12 +2764,18 @@ function buildActaRequestSafe(input: {
   const propietario =
     input.infractorPropietario
       ? null
-      : input.propietarioNombre.trim() && input.propietarioDni.trim() && input.propietarioDireccion.trim()
+      : input.propietarioNombre.trim() &&
+        input.propietarioDni.trim() &&
+        input.propietarioDireccion.trim() &&
+        input.propietarioLocalidad.trim() &&
+        input.propietarioProvincia.trim()
         ? {
             nombre: input.propietarioNombre.trim(),
             apellido: input.propietarioApellido.trim() || undefined,
             dni: input.propietarioDni.trim(),
             direccion: input.propietarioDireccion.trim(),
+            localidad: input.propietarioLocalidad.trim(),
+            provincia: input.propietarioProvincia.trim(),
           }
         : null;
 
@@ -2645,7 +2814,6 @@ function buildActaRequestSafe(input: {
               numero: input.licenciaNumero || undefined,
             }
           : null,
-      propietario: input.infractorPropietario,
     },
     vehiculo: {
       idVeh: input.vehiculoIdVeh ?? undefined,
@@ -2654,6 +2822,7 @@ function buildActaRequestSafe(input: {
       modelo: input.vehiculoModelo || null,
       tipoRodado: input.vehiculoTipoRodado || undefined,
       propietario,
+      infractorPropietario: input.infractorPropietario
     },
     ubicacionRequest: {
       lat: toNumberOrFallback(input.ubicLat, 0),
@@ -2665,11 +2834,17 @@ function buildActaRequestSafe(input: {
     },
     adjunta: input.adjunta.join(','),
     retencion: input.retencion,
-    retencionVehiculo: input.retencionVehiculo,
+    observaciones: input.observaciones,
+    alcoholimetro: {
+      idAlcoholimetro: input.alcoholimetroId ?? 0,
+      idImpresora: input.impresoraId ?? 0,
+    },
     graduacionAlcoholica: input.graduacionAlcoholica,
     infractorFugado: input.infractorFugado,
+    retencionLicencia: input.retencionLicencia,
+    seNiegaAFirmar: input.seNiegaAFirmar,
     juzgado: input.juzgado || undefined,
-    testigos: input.testigos,
+    testigos: input.testigos ?? [],
   };
 }
 
@@ -2825,12 +3000,16 @@ function SelectFieldString({
   value,
   options,
   onChangeValue,
+  disabled,
+  allowClear,
 }: {
   label: string;
   placeholder: string;
   value: string | null;
   options: Array<{ value: string; label: string }>;
   onChangeValue: (value: string | null) => void;
+  disabled?: boolean;
+  allowClear?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const insets = useSafeAreaInsets();
@@ -2840,7 +3019,11 @@ function SelectFieldString({
     <>
       <View style={{ gap: 6 }}>
         <Text style={styles.label}>{label}</Text>
-        <Pressable onPress={() => setIsOpen(true)} style={styles.selectBox}>
+        <Pressable
+          onPress={() => setIsOpen(true)}
+          disabled={disabled}
+          style={[styles.selectBox, disabled ? { opacity: 0.6 } : null]}
+        >
           <Text style={selected ? styles.selectText : styles.selectPlaceholder} numberOfLines={1}>
             {selected ? selected.label : placeholder}
           </Text>
@@ -2855,6 +3038,9 @@ function SelectFieldString({
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
+                {allowClear ? (
+                  <AppButton title="Limpiar" icon="close" variant="secondary" size="sm" onPress={() => onChangeValue(null)} />
+                ) : null}
                 <AppButton title="Cerrar" icon="close" variant="ghost" size="sm" onPress={() => setIsOpen(false)} />
               </View>
             </View>
@@ -2963,3 +3149,10 @@ function normalizeInfractorNombreApellido(input: { nombre: string; apellido: str
 
   return input;
 }
+
+
+
+
+
+
+

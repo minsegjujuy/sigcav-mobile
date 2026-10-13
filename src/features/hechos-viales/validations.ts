@@ -121,7 +121,7 @@ export const peatonSchema = z.object({
   domicilio: optionalText(30, "El domicilio no puede superar los 30 caracteres"),
   localidad: optionalText(30, "La localidad no puede superar los 30 caracteres"),
   tipo: z.enum(["DNI", "LC", "LE", "CI"]),
-  numeroDocumento: optionalRegexText(/^\d{1,8}$/, "El número de documento debe contener hasta 8 dígitos"),
+  numeroDocumento: optionalRegexText(/^\d{1,15}$/, "El número de documento debe contener hasta 15 dígitos"),
   fechaNacimiento: z.string().optional().nullable().or(z.literal("")),
   edad: optionalNumericText("La edad debe ser numérica"),
   dispositivoRetencion: z.boolean(),
@@ -142,7 +142,7 @@ export const acompananteSchema = z.object({
   localidad: optionalText(30, "La localidad no puede superar los 30 caracteres"),
   domicilio: optionalText(30, "El domicilio no puede superar los 30 caracteres"),
   tipo: z.enum(["DNI", "LC", "LE", "CI"]),
-  numeroDocumento: optionalRegexText(/^\d{1,8}$/, "El DNI debe contener hasta 8 dígitos"),
+  numeroDocumento: optionalRegexText(/^\d{1,15}$/, "El DNI debe contener hasta 15 dígitos"),
   fechaNacimiento: z.string().optional().nullable().or(z.literal("")),
   edad: optionalNumericText("La edad debe ser numérica"),
   usoCinturonCasco: z.boolean(),
@@ -158,18 +158,18 @@ export const protagonistaSchema = z.object({
   marca: z.string().trim().max(15, "La marca no puede superar los 15 caracteres").optional().nullable().or(z.literal("")),
   modelo: z.string().trim().max(35, "El modelo no puede superar los 35 caracteres").optional().nullable().or(z.literal("")),
   color: z.string().trim().min(1, "El color es obligatorio").max(15, "El color no puede superar los 15 caracteres"),
-  asegurado: z.boolean(),
-  rto: z.boolean(),
-  cedula: z.boolean(),
-  airbagActivado: z.boolean(),
-  usoSeguridad: z.boolean(),
+  asegurado: z.boolean().nullable().optional(),
+  rto: z.boolean().nullable().optional(),
+  cedula: z.boolean().nullable().optional(),
+  airbagActivado: z.boolean().nullable().optional(),
+  usoSeguridad: z.boolean().nullable().optional(),
   conductorNombre: optionalText(30, "El nombre del conductor no puede superar los 30 caracteres"),
   conductorGenero: z
     .string()
     .trim()
     .min(1, "El género es obligatorio")
     .regex(/^[A-Za-z]$/, "El género debe contener una única letra"),
-  conductorDni: optionalRegexText(/^\d{1,8}$/, "El DNI debe contener hasta 8 dígitos"),
+  conductorDni: optionalRegexText(/^\d{1,15}$/, "El DNI debe contener hasta 15 dígitos"),
   conductorNacionalidad: optionalText(30, "La nacionalidad del conductor no puede superar los 30 caracteres"),
   conductorEdad: optionalNumericText("La edad debe ser numérica"),
   conductorFechaNacimiento: z.string().optional().nullable().or(z.literal("")),
@@ -183,11 +183,20 @@ export const protagonistaSchema = z.object({
   jerarquia: z.string().trim().max(30, "La jerarquía no puede superar los 30 caracteres").optional().nullable().or(z.literal("")),
   legajo: z.string().trim().max(10, "El legajo no puede superar los 10 caracteres").optional().nullable().or(z.literal("")),
   trasladoConductor: z.string().optional().nullable().or(z.literal("")),
+  seHizoElTest: z.boolean(),
   graduacionAlcoholica: z.number().nullable(),
   estadoSalud: z.string().trim().min(1, "El estado de salud es obligatorio").max(20, "El estado de salud no puede superar los 20 caracteres"),
   licenciaRequest: licenciaRequestSchema.optional().nullable(),
   acompanantes: z.array(acompananteSchema).default([]),
   actasNoCargadas: z.array(actaSalienteDetalleSchema).default([]),
+}).superRefine((data, ctx) => {
+  if (data.seHizoElTest && data.graduacionAlcoholica == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["graduacionAlcoholica"],
+      message: "La graduación alcohólica es obligatoria cuando se hizo el test",
+    });
+  }
 }).passthrough();
 
 export const hechoVialFormSchema = z.object({

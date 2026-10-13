@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Controller, useFieldArray, UseFormSetValue } from 'react-hook-form';
+import { Controller, useFieldArray, useWatch, UseFormSetValue } from 'react-hook-form';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AppButton } from '../components/ui/AppButton';
 import { DateFieldString, SelectFieldString } from '../components/ui/SelectedFieldString';
 import { styles } from '../components/ui/styles';
 import { HechoVialForm, Peaton } from '../features/hechos-viales/types';
 import { calcularEdad } from '../utils/formatearFecha';
+import { ESTADO_SALUD, GENEROS, NACIONALIDADES, PROVINCIAS } from '../features/hechos-viales/values';
 
 const ErrorText = ({ message }: { message?: string | null }) => {
   if (!message) return null;
@@ -13,44 +14,6 @@ const ErrorText = ({ message }: { message?: string | null }) => {
 };
 
 const TIPOS_DOCUMENTO: Peaton['tipo'][] = ['DNI', 'LC', 'LE', 'CI'];
-const GENEROS = ['M', 'F', 'OTRO'];
-const NACIONALIDADES = [
-  'ARGENTINA',
-  'CHILENA',
-  'BOLIVIANA',
-  'PARAGUAYA',
-  'BRASILERA',
-  'PERUANA',
-  'VENEZOLANA',
-];
-const PROVINCIAS = [
-  'BUENOS_AIRES',
-  'CIUDAD_AUTONOMA_DE_BUENOS_AIRES',
-  'CATAMARCA',
-  'CHACO',
-  'CHUBUT',
-  'CORDOBA',
-  'CORRIENTES',
-  'ENTRE_RIOS',
-  'FORMOSA',
-  'JUJUY',
-  'LA_PAMPA',
-  'LA_RIOJA',
-  'MENDOZA',
-  'MISIONES',
-  'NEUQUEN',
-  'RIO_NEGRO',
-  'SALTA',
-  'SAN_JUAN',
-  'SAN_LUIS',
-  'SANTA_CRUZ',
-  'SANTA_FE',
-  'SANTIAGO_DEL_ESTERO',
-  'TIERRA_DEL_FUEGO',
-  'TUCUMAN',
-  'N/A',
-];
-const ESTADO_SALUD = ['SIN LESIONES', 'HERIDO LEVE', 'HERIDO GRAVE', 'FALLECIDO'];
 
 interface Props {
   control: any;
@@ -109,12 +72,16 @@ export const SeccionPeatonRN: React.FC<Props> = ({ control, setValue }) => {
           </View>
 
           <ControlledInput control={control} name={`peatones.${index}.nombre`} label="Apellido y nombres" />
-          <ControlledPicker control={control} name={`peatones.${index}.genero`} label="Género" items={GENEROS} />
-          <ControlledPicker control={control} name={`peatones.${index}.nacionalidad`} label="Nacionalidad" items={NACIONALIDADES} />
-          <ControlledPicker control={control} name={`peatones.${index}.provincia`} label="Provincia" items={PROVINCIAS} />
+          <ControlledPicker control={control} name={`peatones.${index}.genero`} label="Género *" items={GENEROS} />
+          <NacionalidadProvinciaFields
+            control={control}
+            setValue={setValue}
+            nacionalidadName={`peatones.${index}.nacionalidad`}
+            provinciaName={`peatones.${index}.provincia`}
+          />
           <ControlledInput control={control} name={`peatones.${index}.domicilio`} label="Domicilio" />
           <ControlledInput control={control} name={`peatones.${index}.localidad`} label="Localidad" />
-          <ControlledPicker control={control} name={`peatones.${index}.tipo`} label="Tipo documento" items={TIPOS_DOCUMENTO.map(String)} />
+          <ControlledPicker control={control} name={`peatones.${index}.tipo`} label="Tipo documento *" items={TIPOS_DOCUMENTO.map(String)} />
           <ControlledInput control={control} name={`peatones.${index}.numeroDocumento`} label="Número de documento" keyboardType="numeric" />
 
           <Controller
@@ -158,15 +125,8 @@ export const SeccionPeatonRN: React.FC<Props> = ({ control, setValue }) => {
             keyboardType="numeric"
           />
 
-          <BooleanField
-            control={control}
-            name={`peatones.${index}.dispositivoRetencion`}
-            label="¿Usa dispositivo de retención?"
-          />
-
           <ControlledInput control={control} name={`peatones.${index}.trasladado`} label="Traslado (Hospital/SAME)" multiline />
-          <ControlledInput control={control} name={`peatones.${index}.descripcion`} label="Descripcion de la persona" multiline />
-          <ControlledPicker control={control} name={`peatones.${index}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
+          <ControlledPicker control={control} name={`peatones.${index}.estadoSalud`} label="Estado de salud *" items={ESTADO_SALUD} />
         </View>
       ))}
     </View>
@@ -246,39 +206,31 @@ const ControlledPicker = ({
   />
 );
 
-const BooleanField = ({
+const NacionalidadProvinciaFields = ({
   control,
-  name,
-  label,
+  setValue,
+  nacionalidadName,
+  provinciaName,
 }: {
   control: any;
-  name: string;
-  label: string;
-}) => (
-  <Controller
-    control={control}
-    name={name}
-    render={({ field, fieldState }) => (
-      <View style={styles.fieldContainer}>
-        <Text style={styles.label}>{label}</Text>
-        <View style={styles.segmentRow}>
-          {[true, false].map((value) => {
-            const selected = field.value === value;
-            return (
-              <TouchableOpacity
-                key={String(value)}
-                style={[styles.segmentButton, selected && styles.segmentButtonSelected]}
-                onPress={() => field.onChange(value)}
-              >
-                <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
-                  {value ? 'SI' : 'NO'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <ErrorText message={fieldState.error?.message} />
-      </View>
-    )}
-  />
-);
+  setValue: UseFormSetValue<HechoVialForm>;
+  nacionalidadName: `peatones.${number}.nacionalidad`;
+  provinciaName: `peatones.${number}.provincia`;
+}) => {
+  const nacionalidad = useWatch({ control, name: nacionalidadName });
+  const mostrarProvincia = String(nacionalidad ?? '').trim() === 'ARGENTINA';
+
+  useEffect(() => {
+    if (mostrarProvincia) return;
+    setValue(provinciaName, '', { shouldDirty: true, shouldValidate: true });
+  }, [mostrarProvincia, provinciaName, setValue]);
+
+  return (
+    <>
+      <ControlledPicker control={control} name={nacionalidadName} label="Nacionalidad" items={NACIONALIDADES} />
+      {mostrarProvincia ? (
+        <ControlledPicker control={control} name={provinciaName} label="Provincia" items={PROVINCIAS} />
+      ) : null}
+    </>
+  );
+};

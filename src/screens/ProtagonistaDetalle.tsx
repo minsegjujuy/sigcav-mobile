@@ -18,7 +18,7 @@ const Label = ({ label, value }: { label: string; value?: any }) => (
   </View>
 );
 
-const booleanText = (value?: boolean | string) => {
+const booleanText = (value?: boolean | string | null) => {
   if (value === true) return 'Sí';
   if (value === false) return 'No';
   if (value === null || value === undefined || value === '') return '—';

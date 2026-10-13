@@ -2,6 +2,15 @@
 export type OptionNumber = { label: string; value: number };
 export type OptionString = { label: string; value: string };
 
+export const TIPO_RODADO_ACTA = [
+  'AUTOMOVIL',
+  'CAMIONETA',
+  'MOTOCICLETA',
+  'CAMION',
+  'OMNIBUS',
+  'OTRO'
+]
+
 export const TIPOS_INVOLUCRADOS = [
   'AUTOMOVIL',
   'CAMIONETA',
@@ -12,6 +21,7 @@ export const TIPOS_INVOLUCRADOS = [
   'MOVIL POLICIAL',
   'MOVIL SAME',
   'MOVIL BOMBEROS',
+  'CAMION',
   'OTRO',
 ];
 
@@ -61,19 +71,19 @@ export const ESTADO_CALZADA = [
   'OTRO',
 ];
 
-export const ESTADO_AMBIENTAL = ['DESPEJADO', 'LLUVIA', 'NIEBLA', 'VIENTO', 'POLVO'];
+export const ESTADO_AMBIENTAL = ['DESPEJADO', 'NUBLADO','LLUVIA', 'GRANIZO', 'NIEVE','NIEBLA / NEBLINA', 'VIENTO', 'POLVO'];
 export const SEMAFORO = ['SI', 'NO', 'INTERMITENTE'];
 export const LUZ_ARTIFICIAL = ['SI', 'NO', 'FUNCIONA'];
 export const MATERIAL_CALZADA = ['ASFALTO', 'RIPIO', 'TIERRA', 'ADOQUIN'];
 
 export const TIPOS_SINIESTRO: OptionString[] = [
-  { label: 'COLISION ENTRE VEHICULOS', value: 'COLISION' },
+  { label: 'COLISION ENTRE VEHICULOS', value: 'COLISIÓN ENTRE VEHÍCULOS' },
   { label: 'VUELCO', value: 'VUELCO' },
   { label: 'DESPEÑAMIENTO', value: 'DESPEÑAMIENTO' },
-  { label: 'ATROPELLO PEATON', value: 'ATROPELLO_PEATON' },
-  { label: 'ATROPELLO ANIMAL', value: 'ATROPELLO_ANIMAL' },
-  { label: 'SALIDA DE LA CALZADA', value: 'SALIDA_DE_LA_CALZADA' },
-  { label: 'CHOQUE CONTRA OBJETO FIJO', value: 'CHOQUE_CONTRA_OBJETO_FIJO' },
+  { label: 'ATROPELLO PEATON', value: 'ATROPELLO PEATON' },
+  { label: 'ATROPELLO ANIMAL', value: 'ATROPELLO ANIMAL' },
+  { label: 'SALIDA DE LA CALZADA', value: 'SALIDA DE LA CALZADA' },
+  { label: 'CHOQUE CONTRA OBJETO FIJO', value: 'CHOQUE CONTRA OBJETO FIJO' },
   { label: 'DESPISTE', value: 'DESPISTE' },
   { label: 'DERRAPE', value: 'DERRAPE' },
 ];
@@ -83,6 +93,7 @@ export const TIPOS_COLISION = [
   'ALCANCE',
   'LATERAL',
   'ANGULO',
+  'MÚLTIPLE'
 ];
 
 export const POSIBLES_CAUSAS = [
@@ -129,7 +140,7 @@ export const NACIONALIDADES = [
   'BRASILERA',
   'PERUANA',
   'VENEZOLANA',
-  'OTRO'
+  'OTRO',
 ];
 export const PROVINCIAS = [
   'BUENOS_AIRES',

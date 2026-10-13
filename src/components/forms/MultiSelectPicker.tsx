@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../theme/colors';
 import { AppButton } from '../ui/AppButton';
@@ -15,14 +15,21 @@ export function MultiSelectPicker<T extends string | number>({
   values,
   options,
   onChangeValues,
+  searchable,
+  searchPlaceholder,
+  minListHeight,
 }: {
   label: string;
   placeholder: string;
   values: T[];
   options: Array<MultiSelectOption<T>>;
   onChangeValues: (values: T[]) => void;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  minListHeight?: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const insets = useSafeAreaInsets();
 
   const summary = useMemo(() => {
@@ -33,6 +40,12 @@ export function MultiSelectPicker<T extends string | number>({
     if (selectedLabels.length === 1) return selectedLabels[0] ?? null;
     return `${selectedLabels.length} seleccionados`;
   }, [options, values]);
+
+  const filteredOptions = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!searchable || !query) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(query));
+  }, [options, searchText, searchable]);
 
   return (
     <>
@@ -64,9 +77,26 @@ export function MultiSelectPicker<T extends string | number>({
               </View>
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
+            {searchable ? (
+              <View style={{ gap: 6 }}>
+                <Text style={styles.searchLabel}>Buscar</Text>
+                <TextInput
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  placeholder={searchPlaceholder ?? 'Buscar por nro'}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            ) : null}
+
+            <ScrollView
+              style={minListHeight ? { minHeight: minListHeight } : null}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 12, minHeight: minListHeight }}
+            >
               <View style={{ gap: 8 }}>
-                {options.map((o) => {
+                {filteredOptions.map((o) => {
                   const isActive = values.includes(o.value);
                   return (
                     <Pressable
@@ -81,6 +111,9 @@ export function MultiSelectPicker<T extends string | number>({
                     </Pressable>
                   );
                 })}
+                {searchable && filteredOptions.length === 0 ? (
+                  <Text style={styles.emptyText}>No se encontraron resultados.</Text>
+                ) : null}
               </View>
             </ScrollView>
           </View>
@@ -122,6 +155,17 @@ const styles = StyleSheet.create({
   },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalTitle: { fontSize: 16, fontWeight: '900', color: Colors.textPrimary },
+  searchLabel: { fontSize: 12, fontWeight: '800', color: Colors.textSecondary },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: Colors.white,
+    fontSize: 15,
+    color: Colors.textPrimary,
+  },
   optionRow: {
     paddingVertical: 12,
     paddingHorizontal: 10,
@@ -131,4 +175,5 @@ const styles = StyleSheet.create({
   },
   optionRowActive: { borderColor: Colors.primary, backgroundColor: Colors.lightPrimary },
   optionText: { fontSize: 15, fontWeight: '800', color: Colors.textPrimary },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', paddingVertical: 12 },
 });

@@ -1,7 +1,7 @@
-import { formatearFechaA_DDMMYYYY } from "../../utils/formatearFecha";
+import { formatearFechaA_DDMMYYYY, formatTimestamp2 } from "../../utils/formatearFecha";
 import { HechoVialListDto, Peaton, Protagonista } from "./types";
 
-const siNo = (valor?: boolean): string =>
+export const siNo = (valor?: boolean | null): string =>
   valor === true ? 'SI' : valor === false ? 'NO' : 'SD';
 
 const textoOGuion = (valor?: string | null) => {
@@ -33,7 +33,7 @@ DESTACAMENTO: ${hecho.puesto}
 
 INFORME DE HECHO VIAL
 
-FECHA Y HORA: ${hecho.fecha}
+${formatTimestamp2(hecho.fecha)}
 RUTA / UBICACIÓN: ${hecho.ubicacionReq?.descripcion ?? ''}
 COORDENADAS: ${hecho.ubicacionReq.lat} , ${hecho.ubicacionReq.lng}
 UNIDAD REGIONAL: ${hecho.ubicacionReq.unidadRegional}
@@ -57,16 +57,14 @@ SEMÁFORO: ${hecho.semaforo}
 
 TIPO SINIESTRO: ${hecho.tipoSiniestro}
 TIPO COLISIÓN: ${hecho.tipoColision || '-'}
+POSIBLES CAUSAS:
+${hecho.posiblesCausas.join(' - ')}
+SÍNTESIS:
+${hecho.sintesis}
 DE LOS HECHOS: ${hecho.deLosHechos || '-'}
 NOTA: ${hecho.nota || '-'}
 
-POSIBLES CAUSAS:
-${hecho.posiblesCausas.join(' - ')}
-
 ${buildPersonalIntervinienteText(hecho)}
-
-SÍNTESIS:
-${hecho.sintesis}
 
 -----------------------------------
 PROTAGONISTAS
@@ -111,7 +109,14 @@ Licencia: ${p.licenciaRequest ?
 Fecha de nacimiento: ${formatearFechaA_DDMMYYYY(p.conductorFechaNacimiento)}
 Descripción: ${p.descripcion || '-'}
 Traslado: ${p.trasladoConductor}
-Alcohol: ${p.graduacionAlcoholica ? `${p.graduacionAlcoholica} G/L` : 'No se realizó ningún test'}
+Alcohol: ${p.graduacionAlcoholica !== null && p.graduacionAlcoholica !== undefined
+    ? `${p.graduacionAlcoholica} G/L` : 'No se realizó ningún test'}
+${p.esFuerzaSeguridad ? 
+  `Legajo: ${p.legajo} 
+Jerarquía: ${p.jerarquia} 
+Situación de revista: ${p.situacion} `
+ : 'No es personal de las fuerzas de seguridad' }
+
 ${p.actasNoCargadas?.length
   ? p.actasNoCargadas
       .map((acta) => `SE LABRÓ ACTA DE COMPROBACIÓN NRO ${acta.nroActa} POR ARTICULADO ${acta.articulado}`)

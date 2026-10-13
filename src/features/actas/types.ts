@@ -14,13 +14,16 @@ export interface ActaRequest {
   vehiculo: VehiculoSolicitud;
   adjunta: string;
   retencion: string;
-  retencionVehiculo: boolean;
+  observaciones: string;
   graduacionAlcoholica: number;
   infractorFugado: boolean;
+  retencionLicencia: boolean;
   juzgado?: number;
   ubicacionRequest: UbicacionRequest;
   //firma?: FirmaDTO;
   testigos: TestigoRequest[];
+  seNiegaAFirmar: boolean,
+  alcoholimetro: AlcoholimetroRequest,
 }
 
 export interface UbicacionRequest {
@@ -41,6 +44,7 @@ export interface VehiculoSolicitud {
   cuadro?: string | undefined | null;
   tipoRodado?: string;
   propietario?: Propietario | null;
+  infractorPropietario: boolean
 }
 
 export interface InfractorSolicitud {
@@ -54,7 +58,6 @@ export interface InfractorSolicitud {
   localidad?: string;
   provincia: string;
   licencia: LicenciaRequest | null;
-  propietario: boolean;
 }
 
 export interface LicenciaRequest{
@@ -65,6 +68,18 @@ export interface LicenciaRequest{
   autoridadExpedicion?: string;
   fechaExpedicion?: string;
   fechaVencimiento?: string;
+}
+
+export interface AlcoholimetroRequest{
+  idImpresora: number,
+  idAlcoholimetro: number,
+}
+
+export interface AlcoholimetroDto {
+  idAlcoholimetro: number;
+  numeroSerieAlcoholimetro: string;
+  idImpresora: number | null;
+  numeroSerieImpresora: string | null;
 }
 
 export interface TestigoRequest {

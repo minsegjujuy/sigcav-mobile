@@ -153,8 +153,12 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    backgroundColor: Colors.lightPrimary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
   },
-  switchLabel: { fontSize: 13, fontWeight: '900', color: Colors.textPrimary },
+  switchLabel: { fontSize: 13, fontWeight: '900' , color: Colors.textPrimary },
 
   // ── Misc layout ───────────────────────────────────────────────────────────
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },

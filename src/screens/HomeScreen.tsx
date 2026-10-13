@@ -19,6 +19,7 @@ import { HechoVialFormRN } from './HechosVialesScreen';
 import HechosVialesScreen from './HechosVialesList';
 import PrinterSelector from '../components/modules/PrinterSelector';
 import TwoFactorSetupScreen from './TwoFactorSetupScreen';
+import { useCatalogos } from '../api/hooks/catalogos';
 
 type NavbarGroupKey = 'actas' | 'hechos_viales' | 'configuracion';
 
@@ -28,7 +29,12 @@ export function HomeScreen() {
   const [tab, setTab] = useState<NavbarTabKey>('mis_actas');
   const [activeGroup, setActiveGroup] = useState<NavbarGroupKey>('actas');
   const [editActa, setEditActa] = useState<ActaRequest | null>(null);
-  const [editHechoVial, setEditHechoVial] = useState<HechoVialForm | null>(null);
+  const [editHechoVial, setEditHechoVial] = useState<HechoVialListDto | null>(null);
+  const { data: catalogos } = useCatalogos();
+  const editHechoVialForm = useMemo(
+    () => (editHechoVial ? mapHechoVialListDtoToForm(editHechoVial, catalogos) : null),
+    [catalogos, editHechoVial]
+  );
 
   //const fade = useRef(new Animated.Value(1)).current;
 
@@ -134,7 +140,7 @@ export function HomeScreen() {
         return (
           <HechosVialesScreen
             onEditHechoVial={(hecho: HechoVialListDto) => {
-              setEditHechoVial(mapHechoVialListDtoToForm(hecho));
+              setEditHechoVial(hecho);
               setTab('nuevo_hecho_vial');
               setActiveGroup('hechos_viales');
             }}
@@ -144,8 +150,8 @@ export function HomeScreen() {
       case 'nuevo_hecho_vial':
         return (
           <HechoVialFormRN
-            hechoVial={editHechoVial}
-            modo={editHechoVial ? 'edit' : 'create'}
+            hechoVial={editHechoVialForm}
+            modo={editHechoVialForm ? 'edit' : 'create'}
             limpiarHechoVial={() => setEditHechoVial(null)}
           />
         );
@@ -159,7 +165,7 @@ export function HomeScreen() {
       default:
         return null;
     }
-  }, [editActa, editHechoVial, tab]);
+  }, [catalogos, editActa, editHechoVial, tab]);
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !isFormTab) return undefined;

@@ -1,4 +1,4 @@
-import type { InfractorSolicitud, TestigoRequest, VehiculoSolicitud } from './types';
+import type { AlcoholimetroRequest, InfractorSolicitud, TestigoRequest, VehiculoSolicitud } from './types';
 
 export interface ArticuloDto {
   idArt: number;
@@ -37,7 +37,11 @@ export interface ActaResumenDto {
   retencionVehiculo: boolean;
   juzgado?: number,
   infractorFugado: boolean,
-  testigos: TestigoRequest[]
+  seNiegaAFirmar: boolean
+  retencionLicencia: boolean,
+  observaciones: string;
+  testigos: TestigoRequest[],
+  alcoholimetroRequest: AlcoholimetroRequest,
 }
 
 export interface DiasCantidad {

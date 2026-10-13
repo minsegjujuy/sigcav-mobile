@@ -17,6 +17,8 @@ export interface Vehiculo {
   motor?: string | null;
   cuadro?: string | null;
   propietario: Propietario | null;
+  infractorPropietario: boolean;
+  tipoRodado?: string | null;
 }
 
 export interface Infractor {

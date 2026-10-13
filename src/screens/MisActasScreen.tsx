@@ -388,7 +388,7 @@ function ActaCard({
             variant="secondary"
             onPress={onPdf}
             loading={isPdfBusy}
-            disabled={isPdfBusy}
+            disabled={true}
           />
         ) : null}
         <AppButton disabled={!validarPeriodoDiasISO(item.fecha, 1)} title="Editar" icon="edit" iconOnly size="sm" variant="secondary" onPress={onEdit} />

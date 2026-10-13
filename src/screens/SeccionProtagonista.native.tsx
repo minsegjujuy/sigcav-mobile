@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Controller, useController, useFieldArray, UseFormSetValue } from 'react-hook-form';
+import { Controller, useController, useFieldArray, useWatch, UseFormClearErrors, UseFormSetValue } from 'react-hook-form';
 import { SeccionAcompanantesRN } from './SeccionAcompanante.native';
 import { styles } from '../components/ui/styles';
 import { AppButton } from '../components/ui/AppButton';
@@ -18,13 +18,13 @@ import { PickerField } from '../components/forms/PickerField';
 import { MultiSelectPicker } from '../components/forms/MultiSelectPicker';
 import { DateTimeStepperPicker } from '../components/forms/DateTimeStrepperPicker';
 import { useAuth } from '../auth/AuthContext';
-import { getJerarquias, type Jerarquia } from '../services/JerarquiaService';
 import { obtenerLicenciaPorNro } from '../services/LicenciaService';
 import { getArticulos } from '../services/ArticuloService';
 import { calcularEdad } from '../utils/formatearFecha';
 import { HechoVialForm } from '../features/hechos-viales/types';
 import type { Articulo } from '../features/catalog/types';
 import { COLORES, ESTADO_SALUD, GENEROS, LICENCIA_CLASE, LICENCIA_ESTADO, NACIONALIDADES, PROVINCIAS, TIPO_RODADO } from '../features/hechos-viales/values';
+import { useCatalogos } from '../api/hooks/catalogos';
 //import FormData from 'react-native/types_generated/Libraries/Network/FormData';
 
 
@@ -43,6 +43,7 @@ interface Props {
   watch: any;
   editable?: boolean;
   setValue: UseFormSetValue<HechoVialForm>
+  clearErrors: UseFormClearErrors<HechoVialForm>;
 }
 
 function createLicenciaRequestForm(): LicenciaRequestForm {
@@ -67,50 +68,46 @@ function createActaNoCargadaForm(): ActaNoCargadaForm {
   };
 }
 
-export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editable, setValue }) => {
+export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editable, setValue, clearErrors }) => {
   const { jwt } = useAuth();
-  const [jerarquias, setJerarquias] = useState<Jerarquia[]>([]);
-  const [isLoadingJerarquias, setIsLoadingJerarquias] = useState(false);
-  const [jerarquiasError, setJerarquiasError] = useState<string | null>(null);
+  const { data: catalogos, isLoading: isLoadingCatalogs, error: catalogosError } = useCatalogos();
 
   const { fields, append, remove } = useFieldArray({
     control,
     name: 'protagonistas',
   });
 
+  const protagonistasCount = fields.length;
   useEffect(() => {
-    let isMounted = true;
+    if (!fields.length) return;
 
-    async function loadJerarquias() {
-      setJerarquiasError(null);
-      setIsLoadingJerarquias(true);
-      try {
-        const res = await getJerarquias(jwt);
-        if (!isMounted) return;
-        setJerarquias(res);
-      } catch (e) {
-        if (!isMounted) return;
-        setJerarquiasError(e instanceof Error ? e.message : 'Error cargando jerarquías.');
-        setJerarquias([]);
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingJerarquias(false);
+    fields.forEach((_, index) => {
+      const protagonista = watch(`protagonistas.${index}`);
+      const debeHacerTest = protagonista?.graduacionAlcoholica != null;
+      if (protagonista?.seHizoElTest !== debeHacerTest) {
+        setValue(`protagonistas.${index}.seHizoElTest`, debeHacerTest, {
+          shouldDirty: false,
+          shouldValidate: false,
+        });
       }
-    }
+    });
+  }, [fields, setValue, watch]);
 
-    loadJerarquias();
-    return () => {
-      isMounted = false;
-    };
-  }, [jwt]);
+  useEffect(() => {
+    if (protagonistasCount > 0) {
+      // El error de raíz del array puede quedar pegado después de un submit fallido.
+      clearErrors('protagonistas');
+    }
+  }, [clearErrors, protagonistasCount]);
 
   const jerarquiaItems = useMemo(
     () =>
-      jerarquias
+      (catalogos?.jerarquias ?? [])
         .map((j) => (j.nombre ?? '').trim())
         .filter(Boolean),
-    [jerarquias]
+    [catalogos]
   );
+  const jerarquiaItemsConOtra = useMemo(() => [...jerarquiaItems, 'OTRA'], [jerarquiaItems]);
 
   return (
     <View style={{ marginTop: 18, gap: 10 }}>
@@ -120,25 +117,24 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
           title="Nuevo protagonista"
           icon="add"
           size="sm"
-          onPress={() =>
+          onPress={() => {
             append({
               tipoRodado: '',
               dominio: '',
               marca: '',
               modelo: '',
               color: '',
-              asegurado: false,
-              rto: false,
-              cedula: false,
-              airbagActivado: false,
-              usoSeguridad: false,
+              asegurado: null,
+              rto: null,
+              cedula: null,
+              airbagActivado: null,
+              usoSeguridad: null,
               conductorNombre: '',
               conductorGenero: '',
               conductorDni: '',
               conductorNacionalidad: '',
               conductorEdad: '',
               conductorFechaNacimiento: '',
-              municipio: '',
               licenciaEstado: 'SD',
               esFuerzaSeguridad: false,
               situacion: '',
@@ -146,6 +142,7 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
               legajo: '',
               trasladoConductor: '',
               descripcion: '',
+              seHizoElTest: false,
               graduacionAlcoholica: null,
               estadoSalud: '',
               licenciaRequest: createLicenciaRequestForm(),
@@ -154,8 +151,9 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
               provincia: '',
               localidad: '',
               acompanantes: [],
-            })
-          }
+            });
+            clearErrors('protagonistas');
+          }}
         />
       </View>
 
@@ -170,30 +168,30 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
               <AppButton title="Quitar" icon="delete" variant="secondary" size="sm" onPress={() => remove(index)} />
             </View>
 
-            <ControlledPicker control={control} name={`protagonistas.${index}.tipoRodado`} label="Tipo de Rodado" items={TIPO_RODADO} />
+            <ControlledPicker control={control} name={`protagonistas.${index}.tipoRodado`} label="Tipo de Rodado *" items={TIPO_RODADO} />
             <ControlledInput control={control} name={`protagonistas.${index}.dominio`} label="Dominio" />
             <ControlledInput control={control} name={`protagonistas.${index}.marca`} label="Marca" />
             <ControlledInput control={control} name={`protagonistas.${index}.modelo`} label="Modelo" />
-            <ControlledPicker control={control} name={`protagonistas.${index}.color`} label="Color" items={COLORES} />
+            <ControlledPicker control={control} name={`protagonistas.${index}.color`} label="Color *" items={COLORES} />
 
-            <BooleanField control={control} name={`protagonistas.${index}.asegurado`} label="¿Asegurado?" />
-            <BooleanField control={control} name={`protagonistas.${index}.rto`} label="¿RTO?" />
-            <BooleanField control={control} name={`protagonistas.${index}.cedula`} label="¿Cédula?" />
-            <BooleanField control={control} name={`protagonistas.${index}.airbagActivado`} label="¿Airbag activado?" />
-            <BooleanField control={control} name={`protagonistas.${index}.usoSeguridad`} label="¿Uso cinturón/casco?" />
+            <TriStateField control={control} name={`protagonistas.${index}.asegurado`} label="¿Asegurado?" />
+            <TriStateField control={control} name={`protagonistas.${index}.rto`} label="¿RTO?" />
+            <TriStateField control={control} name={`protagonistas.${index}.cedula`} label="¿Cédula?" />
+            <TriStateField control={control} name={`protagonistas.${index}.airbagActivado`} label="¿Airbag activado?" />
+            <TriStateField control={control} name={`protagonistas.${index}.usoSeguridad`} label="¿Uso cinturón/casco?" />
 
             <Text style={styles.subTitle}>Datos del conductor</Text>
 
-            <ControlledInput control={control} name={`protagonistas.${index}.conductorNombre`} label="Apellido y Nombres" />
-            <ControlledInput control={control} name={`protagonistas.${index}.conductorDni`} label="DNI" keyboardType="numeric" />
-            <ControlledPicker control={control} name={`protagonistas.${index}.conductorGenero`} label="Género" items={GENEROS} />
+            <ControlledInput control={control} name={`protagonistas.${index}.conductorNombre`} label="Apellido y Nombres *" />
+            <ControlledInput control={control} name={`protagonistas.${index}.conductorDni`} label="DNI *" keyboardType="numeric" />
+            <ControlledPicker control={control} name={`protagonistas.${index}.conductorGenero`} label="Género *" items={GENEROS} />
           <Controller
             control={control}
             name={`protagonistas.${index}.conductorFechaNacimiento`}
             render={({ field: renderField, fieldState }) => (
               <View style={styles.fieldContainer}>
                 <DateFieldString
-                  label="Fecha de Nacimiento"
+                  label="Fecha de Nacimiento *"
                   placeholder="Seleccioná una fecha"
                   value={renderField.value == null ? null : String(renderField.value)}
                   onChangeValue={(v) => {
@@ -221,39 +219,81 @@ export const SeccionProtagonistasRN: React.FC<Props> = ({ control, watch, editab
               </View>
             )}
           />
-            <ControlledInput control={control} editable={false} name={`protagonistas.${index}.conductorEdad`} label="Edad" keyboardType="numeric" />
-            <ControlledPicker control={control} name={`protagonistas.${index}.conductorNacionalidad`} label="Nacionalidad" items={NACIONALIDADES} />
-            <ControlledPicker control={control} name={`protagonistas.${index}.provincia`} label="Provincia" items={PROVINCIAS} />
-            <ControlledInput control={control} name={`protagonistas.${index}.localidad`} label="Localidad" />
-            <ControlledInput control={control} name={`protagonistas.${index}.domicilio`} label="Domicilio" />
+            <ControlledInput control={control} editable={false} name={`protagonistas.${index}.conductorEdad`} label="Edad *" keyboardType="numeric" />
+            <NacionalidadProvinciaFields
+              control={control}
+              setValue={setValue}
+              nacionalidadName={`protagonistas.${index}.conductorNacionalidad`}
+              provinciaName={`protagonistas.${index}.provincia`}
+            />
+            <ControlledInput control={control} name={`protagonistas.${index}.localidad`} label="Localidad *" />
+            <ControlledInput control={control} name={`protagonistas.${index}.domicilio`} label="Domicilio *" />
 
-            <ControlledPicker control={control} name={`protagonistas.${index}.licenciaEstado`} label="Estado Licencia" items={LICENCIA_ESTADO} />
-            <ControlledInput control={control} name={`protagonistas.${index}.municipio`} label="Municipio" />
-            <ControlledInput control={control} name={`protagonistas.${index}.trasladoConductor`} label="Traslado (Hospital/SAME)" multiline />
-            <ControlledInput control={control} name={`protagonistas.${index}.descripcion`} label="Descripcion de la persona" multiline />
-            <ControlledDecimalInput control={control} name={`protagonistas.${index}.graduacionAlcoholica`} label="Graduación alcohólica (g/L)" placeholder="0.00" />
-            <ControlledPicker control={control} name={`protagonistas.${index}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
+            <ControlledPicker control={control} name={`protagonistas.${index}.licenciaEstado`} label="Estado Licencia *" items={LICENCIA_ESTADO} />
+            <ControlledInput control={control} name={`protagonistas.${index}.trasladoConductor`} label="Traslado (Hospital/SAME) *" multiline />
+            <Controller
+              control={control}
+              name={`protagonistas.${index}.seHizoElTest`}
+              render={({ field, fieldState }) => (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>¿Se hizo el test de alcoholemia? *</Text>
+                  <View style={styles.segmentRow}>
+                    {[true, false].map((value) => {
+                      const selected = field.value === value;
+                      return (
+                        <TouchableOpacity
+                          key={String(value)}
+                          style={[styles.segmentButton, selected && styles.segmentButtonSelected]}
+                          onPress={() => {
+                            field.onChange(value);
+                            if (!value) {
+                              setValue(`protagonistas.${index}.graduacionAlcoholica`, null, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                            }
+                          }}
+                        >
+                          <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
+                            {value ? 'SI' : 'NO'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <ErrorText message={fieldState.error?.message} />
+                </View>
+              )}
+            />
+            {watch(`protagonistas.${index}.seHizoElTest`) ? (
+              <ControlledDecimalInput control={control} name={`protagonistas.${index}.graduacionAlcoholica`} label="Graduación alcohólica (g/L) *" placeholder="0.00" />
+            ) : null}
+            <ControlledPicker control={control} name={`protagonistas.${index}.estadoSalud`} label="Estado de salud *" items={ESTADO_SALUD} />
 
-            <BooleanField control={control} name={`protagonistas.${index}.esFuerzaSeguridad`} label="¿Es fuerza de seguridad?" />
+            <BooleanField control={control} name={`protagonistas.${index}.esFuerzaSeguridad`} label="¿Es fuerza de seguridad? *" />
 
             {esFuerza && (
               <>
-                <ControlledInput control={control} name={`protagonistas.${index}.legajo`} label="Legajo" />
-                {isLoadingJerarquias ? (
+                <ControlledInput control={control} name={`protagonistas.${index}.legajo`} label="Legajo *" />
+                {isLoadingCatalogs ? (
                   <View style={styles.loadingRow}>
                     <ActivityIndicator />
                     <Text style={styles.loadingText}>Cargando jerarquías...</Text>
                   </View>
                 ) : null}
-                {jerarquiasError ? <Text style={styles.errorText}>{jerarquiasError}</Text> : null}
-                <ControlledPicker
+                {catalogosError ? (
+                  <Text style={styles.errorText}>
+                    {catalogosError instanceof Error ? catalogosError.message : 'Error cargando jerarquías.'}
+                  </Text>
+                ) : null}
+                <JerarquiaField
                   control={control}
                   name={`protagonistas.${index}.jerarquia`}
-                  label="Jerarquía"
-                  items={jerarquiaItems}
-                  disabled={isLoadingJerarquias || !jerarquiaItems.length}
+                  label="Jerarquía *"
+                  items={jerarquiaItemsConOtra}
+                  disabled={isLoadingCatalogs || !jerarquiaItems.length}
                 />
-                <ControlledInput control={control} name={`protagonistas.${index}.situacion`} label="Situación de revista" />
+                <ControlledInput control={control} name={`protagonistas.${index}.situacion`} label="Situación de revista *" />
               </>
             )}
 
@@ -412,7 +452,7 @@ const SeccionLicenciaRN = ({
           <ControlledInput
             control={control}
             name={`protagonistas.${protagonistIndex}.licenciaRequest.numero`}
-            label="Número de licencia"
+            label="Número de licencia *"
           />
           <Controller
             control={control}
@@ -420,7 +460,7 @@ const SeccionLicenciaRN = ({
             render={({ field, fieldState }) => (
               <View style={styles.fieldContainer}>
                 <MultiSelectPicker
-                  label="Clase de licencia"
+                  label="Clase de licencia *"
                   placeholder="Seleccioná una o más clases"
                   values={String(field.value ?? '')
                     .split(',')
@@ -436,7 +476,7 @@ const SeccionLicenciaRN = ({
           <ControlledInput
             control={control}
             name={`protagonistas.${protagonistIndex}.licenciaRequest.autoridadExpedicion`}
-            label="Autoridad de expedición"
+            label="Autoridad de expedición *"
           />
           <Controller
             control={control}
@@ -444,7 +484,7 @@ const SeccionLicenciaRN = ({
             render={({ field, fieldState }) => (
               <View style={styles.fieldContainer}>
                 <PickerLicenseDateField
-                  label="Fecha de expedición"
+                  label="Fecha de expedición *"
                   placeholder="Seleccioná una fecha"
                   value={field.value == null ? '' : String(field.value)}
                   onChangeValue={(value) => field.onChange(value ?? '')}
@@ -460,7 +500,7 @@ const SeccionLicenciaRN = ({
             render={({ field, fieldState }) => (
               <View style={styles.fieldContainer}>
                 <PickerLicenseDateField
-                  label="Fecha de vencimiento"
+                  label="Fecha de vencimiento *"
                   placeholder="Seleccioná una fecha"
                   value={field.value == null ? '' : String(field.value)}
                   onChangeValue={(value) => field.onChange(value ?? '')}
@@ -542,7 +582,7 @@ const SeccionActasNoCargadasRN = ({
           <ControlledInput
             control={control}
             name={`protagonistas.${pIndex}.actasNoCargadas.${index}.nroActa`}
-            label="Número de acta"
+            label="Número de acta *"
           />
           <Controller
             control={control}
@@ -553,7 +593,7 @@ const SeccionActasNoCargadasRN = ({
                 {isLoadingArticulos ? <Text style={styles.helperText}>Cargando artículos...</Text> : null}
                 {articulosError ? <Text style={styles.errorText}>{articulosError}</Text> : null}
                 <MultiSelectPicker
-                  label="Articulados"
+                  label="Articulados *"
                   placeholder="Seleccioná uno o más artículos"
                   values={String(field.value ?? '')
                     .split(',')
@@ -704,6 +744,109 @@ const ControlledPicker = ({
   />
 );
 
+const NacionalidadProvinciaFields = ({
+  control,
+  setValue,
+  nacionalidadName,
+  provinciaName,
+}: {
+  control: any;
+  setValue: UseFormSetValue<HechoVialForm>;
+  nacionalidadName: `protagonistas.${number}.conductorNacionalidad`;
+  provinciaName: `protagonistas.${number}.provincia`;
+}) => {
+  const nacionalidad = useWatch({ control, name: nacionalidadName });
+  const mostrarProvincia = String(nacionalidad ?? '').trim() === 'ARGENTINA';
+
+  useEffect(() => {
+    if (mostrarProvincia) return;
+    setValue(provinciaName, '', { shouldDirty: true, shouldValidate: true });
+  }, [mostrarProvincia, provinciaName, setValue]);
+
+  return (
+    <>
+      <ControlledPicker control={control} name={nacionalidadName} label="Nacionalidad *" items={NACIONALIDADES} />
+      {mostrarProvincia ? (
+        <ControlledPicker control={control} name={provinciaName} label="Provincia *" items={PROVINCIAS} />
+      ) : null}
+    </>
+  );
+};
+
+const JerarquiaField = ({
+  control,
+  name,
+  label,
+  items,
+  disabled,
+}: {
+  control: any;
+  name: `protagonistas.${number}.jerarquia`;
+  label: string;
+  items: string[];
+  disabled?: boolean;
+}) => {
+  const { field, fieldState } = useController({ control, name });
+  const currentValue = String(field.value ?? '').trim();
+  const knownItems = items.filter((item) => item !== 'OTRA');
+  const [otherMode, setOtherMode] = useState(currentValue === 'OTRA' || (currentValue.length > 0 && !knownItems.includes(currentValue)));
+
+  useEffect(() => {
+    if (!currentValue) return;
+
+    if (currentValue && !knownItems.includes(currentValue)) {
+      setOtherMode(true);
+      return;
+    }
+
+    if (currentValue === 'OTRA') {
+      setOtherMode(true);
+      return;
+    }
+
+    setOtherMode(false);
+  }, [currentValue, knownItems]);
+
+  return (
+    <View style={styles.fieldContainer}>
+      <SelectFieldString
+        label={label}
+        placeholder="Seleccioná una opción"
+        value={otherMode ? 'OTRA' : (knownItems.includes(currentValue) ? currentValue : null)}
+        options={items.map((item) => ({ label: item, value: item }))}
+        onChangeValue={(v) => {
+          if (!v) {
+            setOtherMode(false);
+            field.onChange('');
+            return;
+          }
+
+          if (v === 'OTRA') {
+            setOtherMode(true);
+            field.onChange('');
+            return;
+          }
+
+          setOtherMode(false);
+          field.onChange(v);
+        }}
+        disabled={disabled}
+        allowClear
+      />
+      {otherMode ? (
+        <TextInput
+          style={styles.input}
+          value={currentValue}
+          placeholder="Escribí la jerarquía"
+          onChangeText={(text) => field.onChange(text)}
+          editable={!disabled}
+        />
+      ) : null}
+      <ErrorText message={fieldState.error?.message} />
+    </View>
+  );
+};
+
 const BooleanField = ({
   control,
   name,
@@ -738,6 +881,43 @@ const BooleanField = ({
         <ErrorText message={fieldState.error?.message} />
       </View>
     )}
+  />
+);
+
+const TriStateField = ({
+  control,
+  name,
+  label,
+}: {
+  control: any;
+  name: string;
+  label: string;
+}) => (
+  <Controller
+    control={control}
+    name={name}
+    render={({ field, fieldState }) => {
+      const value = field.value === true ? 'SI' : field.value === false ? 'NO' : 'SD';
+
+      return (
+        <View style={styles.fieldContainer}>
+          <SelectFieldString
+            label={label}
+            placeholder="Seleccioná una opción"
+            value={value}
+            options={['SI', 'NO', 'SD'].map((item) => ({ label: item, value: item }))}
+            onChangeValue={(next) => {
+              if (!next || next === 'SD') {
+                field.onChange(null);
+                return;
+              }
+              field.onChange(next === 'SI');
+            }}
+          />
+          <ErrorText message={fieldState.error?.message} />
+        </View>
+      );
+    }}
   />
 );
 

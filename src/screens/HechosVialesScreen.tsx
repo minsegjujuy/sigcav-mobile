@@ -25,15 +25,12 @@ import { findDepartamento } from '../features/geo/findDepartamento';
 import { DEPARTAMENTOS_JUJUY } from '../features/geo/jujuyGeoJson';
 import * as Location from 'expo-location';
 import { useAuth } from '../auth/AuthContext';
-import { getGrupos } from '../services/GrupoService';
-import { getPuestos } from '../services/PuestoService';
-import { obtenerUnidadesRegionalesPorDepartamento } from '../services/UnidadRegionalService';
 import { guardarHechoVial as guardarHechoVialApi } from '../services/HechoVialService';
-import type { Grupo, Puesto } from '../features/catalog/types';
-import type { Localidad, UnidadRegional } from '../features/ubicacion/types';
+import type { Catalogos, Localidad } from '../features/ubicacion/types';
 import { SnackbarUtilities } from '../utils/snackbar/SnackbarUtilities';
 import { CONFIGURACION_VIA, ESTADO_AMBIENTAL, ESTADO_CALZADA, ESTADO_FISICO_CALZADA, LUZ_ARTIFICIAL, MATERIAL_CALZADA, OptionNumber, OptionString, POSIBLES_CAUSAS, SEMAFORO, TIPO_VIA, TIPOS_COLISION, TIPOS_INVOLUCRADOS, TIPOS_SINIESTRO } from '../features/hechos-viales/values';
 import { SkeletonForm } from '../components/ui/skeleton/SkeletonForm';
+import { useCatalogos } from '../api/hooks/catalogos';
 
 export { TIPOS_INVOLUCRADOS };
 
@@ -43,8 +40,6 @@ const ErrorText = ({ message }: { message?: string | null }) => {
 };
 
 interface Props {
-  getPuestos?: () => Promise<Puesto[]>;
-  obtenerUnidadesRegionalesPorDepartamento?: (departamento: string) => Promise<UnidadRegional[]>;
   hechoVial?: HechoVialForm | null;
   modo?: 'create' | 'edit';
   limpiarHechoVial?: () => void;
@@ -140,9 +135,42 @@ function getCamposPendientesProtagonistas(protagonistas: HechoVialForm['protagon
   });
 }
 
+function normalizeText(value: string | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLocaleLowerCase('es-AR');
+}
+
+function findDepartamentoByNombre(
+  catalogos: Catalogos,
+  nombre: string
+) {
+  const target = normalizeText(nombre);
+  for (const ur of catalogos.unidadesRegionales) {
+    for (const departamento of ur.departamentos) {
+      if (normalizeText(departamento.nombre) === target) {
+        return { ur, departamento };
+      }
+    }
+  }
+  return null;
+}
+
+function findDepartamentoByLocalidad(
+  catalogos: Catalogos,
+  localidadId: number
+) {
+  for (const ur of catalogos.unidadesRegionales) {
+    for (const departamento of ur.departamentos) {
+      if (departamento.localidades.some((loc) => loc.id === localidadId)) {
+        return { ur, departamento };
+      }
+    }
+  }
+  return null;
+}
+
 export const HechoVialFormRN: React.FC<Props> = ({
-  getPuestos: getPuestosOverride,
-  obtenerUnidadesRegionalesPorDepartamento: obtenerUnidadesRegionalesPorDepartamentoOverride,
   hechoVial,
   modo = 'create',
   limpiarHechoVial,
@@ -156,12 +184,13 @@ export const HechoVialFormRN: React.FC<Props> = ({
 
   const {
     control,
-    handleSubmit,
     reset,
     watch,
     setValue,
+    getValues,
     setError,
     clearErrors,
+    formState: { errors },
   } = useForm<HechoVialForm>({
     defaultValues,
   });
@@ -184,12 +213,9 @@ export const HechoVialFormRN: React.FC<Props> = ({
     name: 'unidades',
   });
 
-  const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [puestos, setPuestos] = useState<Puesto[]>([]);
   const [localidades, setLocalidades] = useState<Localidad[]>([]);
-  const [unidadesRegionales, setUnidadesRegionales] = useState<UnidadRegional[]>([]);
-  const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(false);
-  const [catalogsError, setCatalogsError] = useState<string | null>(null);
+  const [unidadesRegionales, setUnidadesRegionales] = useState<Array<{ idUr: number; nombre: string }>>([]);
+  const { data: catalogos, isLoading: isLoadingCatalogs, error: catalogosError } = useCatalogos();
 
   const [ubicLat, setUbicLat] = useState<string | null>(null);
   const [ubicLng, setUbicLng] = useState<string | null>(null);
@@ -200,115 +226,174 @@ export const HechoVialFormRN: React.FC<Props> = ({
   const [ubicacionError, setUbicacionError] = useState<string | null>(null);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [isLoadingUr, setIsLoadingUr] = useState(false);
-  const [urError, setUrError] = useState<string | null>(null);
+  const isLoadingUr = false;
+  const urError = null;
 
   const watchInvolucrados = useWatch({ control, name: 'involucrados' });
   const tipoSiniestro = watch('tipoSiniestro');
   const tipoVia = watch('tipoVia');
   const estadoFisicoCalzada = watch('estadoFisicoCalzada');
   const estadoCalzada = watch('estadoCalzada');
+  const [estadoFisicoCalzadaModo, setEstadoFisicoCalzadaModo] = useState<string | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadCatalogs() {
-      setCatalogsError(null);
-      setIsLoadingCatalogs(true);
-      try {
-        const [puestosRes, gruposRes] = await Promise.all([
-          getPuestosOverride ? getPuestosOverride() : getPuestos(jwt),
-          getGrupos(jwt),
-        ]);
-        if (!isMounted) return;
-        setPuestos(puestosRes);
-        setGrupos(gruposRes);
-      } catch (e) {
-        if (!isMounted) return;
-        setCatalogsError(e instanceof Error ? e.message : 'Error cargando catálogos.');
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingCatalogs(false);
-      }
+    const raw = (estadoFisicoCalzada ?? '').trim();
+    if (!raw) {
+      setEstadoFisicoCalzadaModo(null);
+      return;
     }
 
-    loadCatalogs();
-    return () => {
-      isMounted = false;
-    };
-  }, [jwt]);
+    const option = ESTADO_FISICO_CALZADA.find((item) => item === raw);
+    setEstadoFisicoCalzadaModo(option ?? 'OTRO');
+  }, [estadoFisicoCalzada]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const initializeEditMode = async () => {
-      if (modo !== 'edit' || !hechoVial) return;
-
-      reset(hechoVial);
-
-      const ub = hechoVial.ubicacionReq ?? defaultUbicacion;
-      const depto = (ub.departamento ?? '').trim();
-      const unidadRegionalTexto = String(ub.unidadRegional ?? '').trim();
-      const localidadTexto = String(ub.localidad ?? '').trim();
-
-      setUbicacionError(null);
-      setUrError(null);
-      setUbicLat(ub.lat ? String(ub.lat) : null);
-      setUbicLng(ub.lng ? String(ub.lng) : null);
-      setUbicDepartamento(depto || null);
-      setUbicUnidadRegional(null);
-      setUbicLocalidad(null);
-      setUbicDescripcion(ub.descripcion ?? '');
-      setUnidadesRegionales([]);
-      setLocalidades([]);
-
-      if (!depto) return;
-
-      const ur = await loadUnidadesRegionalesForDepartamento(depto);
-      if (!isMounted) return;
-
-      const normalizeMatchText = (value: unknown) => String(value ?? '').trim().toLowerCase();
-
-      const unidadRegionalEncontrada =
-        ur.find((u) => normalizeMatchText(u.nombre) === normalizeMatchText(unidadRegionalTexto)) ??
-        ur.find((u) => normalizeMatchText(String(u.idUr)) === normalizeMatchText(unidadRegionalTexto));
-
-      if (unidadRegionalEncontrada) {
-        setUbicUnidadRegional(unidadRegionalEncontrada.idUr);
-      }
-
-      const deptoData = (unidadRegionalEncontrada ?? ur[0])
-        ?.departamentos.find((d) => d.nombre === depto);
-
-      const localidadesDisponibles = deptoData?.localidades ?? [];
-      setLocalidades(localidadesDisponibles);
-
-      const localidadEncontrada =
-        localidadesDisponibles.find(
-          (item) => normalizeMatchText(item.nombre) === normalizeMatchText(localidadTexto)
-        ) ??
-        localidadesDisponibles.find(
-          (item) => normalizeMatchText(String(item.id)) === normalizeMatchText(localidadTexto)
-        );
-
-      if (localidadEncontrada) {
-        setUbicLocalidad(localidadEncontrada.id);
-      }
-    };
-
-    void initializeEditMode();
-
     if (modo === 'create' && !hechoVial) {
       reset(defaultValues);
+      setUbicDepartamento(null);
+      setUbicUnidadRegional(null);
+      setUbicLocalidad(null);
+      setUbicLat(null);
+      setUbicLng(null);
+      setUbicDescripcion('');
+      setUnidadesRegionales([]);
+      setLocalidades([]);
+      return;
     }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [hechoVial, modo, reset]);
+    if (modo !== 'edit' || !hechoVial) return;
 
-  const puestosOptions = useMemo<OptionNumber[]>(() => puestos.map((p) => ({ label: p.nombre, value: p.idPuesto })), [puestos]);
-  const gruposOptions = useMemo<OptionNumber[]>(() => grupos.map((g) => ({ label: g.nombre, value: g.idGrupo })), [grupos]);
+    reset(hechoVial);
+
+    const ub = hechoVial.ubicacionReq ?? defaultUbicacion;
+    console.log('Hecho vial edit init:', {
+      hechoVialId: hechoVial.id,
+      ubicacionReq: ub,
+      departamento: ub.departamento,
+      unidadRegional: ub.unidadRegional,
+      localidad: ub.localidad,
+      catalogosListos: Boolean(catalogos?.unidadesRegionales?.length),
+    });
+    setUbicacionError(null);
+    setUbicLat(ub.lat ? String(ub.lat) : null);
+    setUbicLng(ub.lng ? String(ub.lng) : null);
+    setUbicDescripcion(ub.descripcion ?? '');
+
+    const departamentoInicial = (ub.departamento ?? '').trim() || null;
+    const unidadRegionalInicial = ub.unidadRegional ?? null;
+    const localidadInicial = ub.localidad ?? null;
+
+    if (!catalogos?.unidadesRegionales?.length) {
+      setUbicDepartamento(departamentoInicial);
+      setUbicUnidadRegional(unidadRegionalInicial);
+      setUbicLocalidad(localidadInicial);
+      return;
+    }
+
+    let departamentoResuelto: string | null = departamentoInicial;
+    let unidadRegionalResuelta = unidadRegionalInicial;
+    let localidadResuelta = localidadInicial;
+    let localidadesResueltas: Localidad[] = [];
+    let unidadesResueltas: Array<{ idUr: number; nombre: string }> = [];
+
+    const porUnidadRegional =
+      unidadRegionalInicial !== null
+        ? (() => {
+            const ur = catalogos.unidadesRegionales.find((item) => item.idUr === unidadRegionalInicial);
+            if (!ur) return null;
+
+            const departamento =
+              (localidadInicial !== null
+                ? ur.departamentos.find((d) => d.localidades.some((loc) => loc.id === localidadInicial))
+                : null) ??
+              (departamentoInicial
+                ? ur.departamentos.find((d) => normalizeText(d.nombre) === normalizeText(departamentoInicial))
+                : null) ??
+              ur.departamentos[0] ??
+              null;
+
+            return departamento ? { ur, departamento } : null;
+          })()
+        : null;
+
+    const porLocalidad =
+      localidadInicial !== null ? findDepartamentoByLocalidad(catalogos, localidadInicial) : null;
+
+    const porNombre = departamentoInicial ? findDepartamentoByNombre(catalogos, departamentoInicial) : null;
+
+    const match = porLocalidad ?? porUnidadRegional ?? porNombre;
+
+    if (match) {
+      departamentoResuelto = match.departamento.nombre;
+      unidadesResueltas = catalogos.unidadesRegionales
+        .filter((ur) =>
+          ur.departamentos.some(
+            (d) => normalizeText(d.nombre) === normalizeText(match.departamento.nombre)
+          )
+        )
+        .map((ur) => ({ idUr: ur.idUr, nombre: ur.nombre }));
+
+      localidadesResueltas = match.departamento.localidades ?? [];
+
+      if (unidadRegionalResuelta === null) {
+        unidadRegionalResuelta = match.ur.idUr;
+      }
+
+      if (
+        localidadResuelta !== null &&
+        !localidadesResueltas.some((loc) => loc.id === localidadResuelta)
+      ) {
+        localidadResuelta = null;
+      }
+    }
+
+    setUbicDepartamento(departamentoResuelto);
+    setUbicUnidadRegional(unidadRegionalResuelta);
+    setUbicLocalidad(localidadResuelta);
+    setUnidadesRegionales(unidadesResueltas);
+    setLocalidades(localidadesResueltas);
+  }, [catalogos, hechoVial, modo, reset]);
+
+  useEffect(() => {
+    const depto = (ubicDepartamento ?? '').trim();
+    if (!depto) {
+      setUnidadesRegionales([]);
+      setLocalidades([]);
+      return;
+    }
+
+    if (!catalogos?.unidadesRegionales?.length) {
+      return;
+    }
+
+    const unidades = catalogos.unidadesRegionales
+      .filter((ur) => ur.departamentos.some((d) => normalizeText(d.nombre) === normalizeText(depto)))
+      .map((ur) => ({ idUr: ur.idUr, nombre: ur.nombre }));
+
+    setUnidadesRegionales(unidades);
+
+    const deptoData = findDepartamentoByNombre(catalogos, depto)?.departamento;
+
+    const localidadesDisponibles = deptoData?.localidades ?? [];
+    setLocalidades(localidadesDisponibles);
+
+    if (ubicUnidadRegional !== null && !unidades.some((u) => u.idUr === ubicUnidadRegional)) {
+      setUbicUnidadRegional(null);
+    }
+
+    if (ubicLocalidad !== null && !localidadesDisponibles.some((l) => l.id === ubicLocalidad)) {
+      setUbicLocalidad(null);
+    }
+  }, [catalogos, ubicDepartamento, ubicLocalidad, ubicUnidadRegional]);
+
+  const puestosOptions = useMemo<OptionNumber[]>(
+    () => (catalogos?.puestos ?? []).map((p) => ({ label: p.nombre, value: p.idPuesto })),
+    [catalogos]
+  );
+  const gruposOptions = useMemo<OptionNumber[]>(
+    () => (catalogos?.grupos ?? []).map((g) => ({ label: g.nombre, value: g.idGrupo })),
+    [catalogos]
+  );
 
   function toNumberOrFallback(value: string | null | undefined, fallback: number): number {
     const n = Number(value);
@@ -331,43 +416,15 @@ export const HechoVialFormRN: React.FC<Props> = ({
     setValue('ubicacionReq', ubicacionReq);
   }, [setValue, ubicacionReq]);
 
-  async function loadUnidadesRegionalesForDepartamento(departamento: string): Promise<UnidadRegional[]> {
-    const depto = departamento.trim();
-    if (!depto) {
-      setUnidadesRegionales([]);
-      setLocalidades([]);
-      return [];
-    }
-
-    setUrError(null);
-    setIsLoadingUr(true);
-    try {
-      const ur = await (obtenerUnidadesRegionalesPorDepartamentoOverride
-        ? obtenerUnidadesRegionalesPorDepartamentoOverride(depto)
-        : obtenerUnidadesRegionalesPorDepartamento(depto, jwt));
-      setUnidadesRegionales(ur);
-      return ur;
-    } catch (e) {
-      setUnidadesRegionales([]);
-      setLocalidades([]);
-      setUrError(e instanceof Error ? e.message : 'Error cargando unidades regionales.');
-      return [];
-    } finally {
-      setIsLoadingUr(false);
-    }
-  }
-
-  async function onDepartamentoChanged(departamento: string | null) {
+  function onDepartamentoChanged(departamento: string | null) {
     const depto = (departamento ?? '').trim();
     setUbicDepartamento(depto || null);
     setUbicUnidadRegional(null);
     setUbicLocalidad(null);
-    setLocalidades([]);
     if (!depto) {
       setUnidadesRegionales([]);
-      return;
+      setLocalidades([]);
     }
-    await loadUnidadesRegionalesForDepartamento(depto);
   }
 
   function onUnidadRegionalChanged(id: number | null) {
@@ -379,9 +436,9 @@ export const HechoVialFormRN: React.FC<Props> = ({
       return;
     }
 
-    const depto = unidadesRegionales
+    const depto = catalogos?.unidadesRegionales
       .find((u) => u.idUr === id)
-      ?.departamentos.find((d) => d.nombre === ubicDepartamento);
+      ?.departamentos.find((d) => normalizeText(d.nombre) === normalizeText(ubicDepartamento));
 
     setLocalidades(depto?.localidades ?? []);
   }
@@ -419,10 +476,12 @@ export const HechoVialFormRN: React.FC<Props> = ({
     }
   }
 
-  const onSubmit = async (data: HechoVialForm) => {
+  const submitHechoVial = async () => {
+      const data = getValues();
       const protagonistasNormalizados = data.protagonistas.map((protagonista) => ({
         ...protagonista,
         licenciaRequest: normalizeLicenciaRequest(protagonista.licenciaRequest),
+        //graduacionAlcoholica: protagonista.seHizoElTest ? protagonista.graduacionAlcoholica : null,
       }));
 
       const payload: HechoVialForm = {
@@ -431,15 +490,34 @@ export const HechoVialFormRN: React.FC<Props> = ({
         ubicacionReq,
       };
 
-      clearErrors();
+      console.log('Hecho vial submit body:', payload);
+      clearErrors('protagonistas');
       const parsed = hechoVialFormSchema.safeParse(payload);
       if (!parsed.success) {
+        console.log(
+          'Hecho vial validation issues:',
+          parsed.error.issues.map((issue) => ({
+            path: issue.path.join('.'),
+            message: issue.message,
+          }))
+        );
+
+        const messages = parsed.error.issues.map((issue) => {
+          const path = issue.path.join('.');
+          return path ? `${path}: ${issue.message}` : issue.message;
+        });
+
         for (const issue of parsed.error.issues) {
           const fieldPath = issue.path.join('.');
           if (fieldPath) {
             setError(fieldPath as any, { type: 'manual', message: issue.message });
           }
         }
+
+        if (messages.length > 0) {
+          Alert.alert('Errores de validación', messages.slice(0, 6).join('\n'));
+        }
+
         scrollToTop();
         return;
       }
@@ -457,7 +535,6 @@ export const HechoVialFormRN: React.FC<Props> = ({
         setUbicLocalidad(null);
         setUbicDescripcion('');
         setUbicacionError(null);
-        setUrError(null);
         setUnidadesRegionales([]);
         setLocalidades([]);
       };
@@ -497,12 +574,14 @@ export const HechoVialFormRN: React.FC<Props> = ({
           <SkeletonForm sections={3} fieldsPerSection={5} />
         </View>
       ) : null}
-      {catalogsError ? <Text style={styles.errorText}>{catalogsError}</Text> : null}
+      {catalogosError ? (
+        <Text style={styles.errorText}>{catalogosError instanceof Error ? catalogosError.message : 'Error cargando catálogos.'}</Text>
+      ) : null}
 
       <ControlledPicker
         control={control}
         name="destacamento"
-        label="Destacamento"
+        label="Destacamento *"
         options={puestosOptions}
         numeric
         placeholder="Seleccioná un destacamento"
@@ -511,7 +590,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <ControlledPicker
         control={control}
         name="grupo"
-        label="Seleccionar grupo"
+        label="Seleccionar grupo *"
         options={gruposOptions}
         numeric
         placeholder="Seleccioná un grupo"
@@ -523,7 +602,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
         render={({ field, fieldState }) => (
           <View style={styles.fieldContainer}>
             <DateFieldString
-              label="Fecha"
+              label="Fecha *"
               placeholder="Seleccioná una fecha"
               value={field.value == null ? null : String(field.value)}
               onChangeValue={(v) => field.onChange(v ?? '')}
@@ -533,8 +612,8 @@ export const HechoVialFormRN: React.FC<Props> = ({
           </View>
         )}
       />
-      <ControlledInput control={control} name="hora" label="Hora" placeholder="HH:MM:SS" />
-      <ControlledInput control={control} name="comisaria" label="Comisaría" placeholder="Ej. Seccional 3" />
+      <ControlledInput control={control} name="hora" label="Hora *" placeholder="HH:MM:SS" />
+      <ControlledInput control={control} name="comisaria" label="Comisaría *" placeholder="Ej. Seccional 3" />
 
       <UbicacionSection
         ubicLat={ubicLat}
@@ -560,7 +639,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
         visible={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         initialValue={
-          ubicLat && ubicLng && ubicDepartamento && ubicLocalidad && ubicUnidadRegional
+          ubicLat && ubicLng && ubicDepartamento && ubicLocalidad !== null && ubicUnidadRegional !== null
             ? {
                 lat: toNumberOrFallback(ubicLat, 0),
                 lng: toNumberOrFallback(ubicLng, 0),
@@ -589,28 +668,28 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <ControlledSegment
         control={control}
         name="victimaFatal"
-        label="¿Víctima Fatal?"
+        label="¿Víctima Fatal? *"
         options={['SI', 'NO']}
       />
 
       <ControlledSegment
         control={control}
         name="zona"
-        label="Zona"
+        label="Zona *"
         options={['URBANA', 'RURAL']}
       />
 
       <ControlledSegment
         control={control}
         name="danosMateriales"
-        label="Daños Materiales"
+        label="Daños Materiales *"
         options={['SI', 'NO']}
       />
 
       <ControlledPicker
         control={control}
         name="tipoVia"
-        label="Tipo de Vía"
+        label="Tipo de Vía *"
         options={TIPO_VIA.map((x) => ({ label: x, value: x }))}
       />
 
@@ -627,14 +706,14 @@ export const HechoVialFormRN: React.FC<Props> = ({
             <ControlledInput
               control={control}
               name={`involucrados.${index}.cantidad`}
-              label="Cantidad"
+              label="Cantidad *"
               keyboardType="numeric"
             />
 
             <ControlledPicker
               control={control}
               name={`involucrados.${index}.tipo`}
-              label="Tipo de Vehículo/Persona"
+              label="Tipo de Vehículo/Persona *"
               options={TIPOS_INVOLUCRADOS.map((x) => ({ label: x, value: x }))}
             />
 
@@ -642,7 +721,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
               <ControlledInput
                 control={control}
                 name={`involucrados.${index}.especificarOtro`}
-                label="Especificar otro"
+                label="Especificar otro *"
               />
             )}
 
@@ -668,29 +747,56 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <ControlledPicker
         control={control}
         name="configuracionVia"
-        label="Configuración de la Vía"
+        label="Configuración de la Vía *"
         options={CONFIGURACION_VIA.map((x) => ({ label: x, value: x }))}
       />
 
-      <ControlledPicker
+      <Controller
         control={control}
         name="estadoFisicoCalzada"
-        label="Estado físico de la calzada"
-        options={ESTADO_FISICO_CALZADA.map((x) => ({ label: x, value: x }))}
-      />
+        render={({ field, fieldState }) => (
+          <View style={styles.fieldContainer}>
+            <SelectFieldString
+              label="Estado físico de la calzada *"
+              placeholder="Seleccioná un estado"
+              value={estadoFisicoCalzadaModo}
+              options={ESTADO_FISICO_CALZADA.map((x) => ({ label: x, value: x }))}
+              onChangeValue={(next) => {
+                setEstadoFisicoCalzadaModo(next);
+                if (!next) {
+                  field.onChange('');
+                  return;
+                }
+                if (next !== 'OTRO') {
+                  field.onChange(next);
+                } else {
+                  field.onChange('');
+                }
+              }}
+              allowClear
+            />
 
-      {estadoFisicoCalzada === 'OTRO' && (
-        <ControlledInput
-          control={control}
-          name="estadoFisicoCalzada"
-          label="Especificar estado físico"
-        />
-      )}
+            {estadoFisicoCalzadaModo === 'OTRO' ? (
+              <View style={{ gap: 6 }}>
+                <Text style={styles.label}>Especificar estado físico *</Text>
+                <TextInput
+                  value={estadoFisicoCalzada === 'OTRO' ? '' : estadoFisicoCalzada}
+                  onChangeText={(text) => field.onChange(text)}
+                  placeholder="Escribí el estado físico"
+                  style={styles.input}
+                />
+              </View>
+            ) : null}
+
+            <ErrorText message={fieldState.error?.message} />
+          </View>
+        )}
+      />
 
       <ControlledPicker
         control={control}
         name="estadoCalzada"
-        label="Condición de superficie"
+        label="Condición de superficie *"
         options={ESTADO_CALZADA.map((x) => ({ label: x, value: x }))}
       />
 
@@ -701,28 +807,28 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <ControlledPicker
         control={control}
         name="estadoAmbiental"
-        label="Estado Ambiental"
+        label="Estado Ambiental *"
         options={ESTADO_AMBIENTAL.map((x) => ({ label: x, value: x }))}
       />
 
       <ControlledPicker
         control={control}
         name="semaforo"
-        label="Semáforo"
+        label="Semáforo *"
         options={SEMAFORO.map((x) => ({ label: x, value: x }))}
       />
 
       <ControlledPicker
         control={control}
         name="luzArtificial"
-        label="Luz Artificial"
+        label="Luz Artificial *"
         options={LUZ_ARTIFICIAL.map((x) => ({ label: x, value: x }))}
       />
 
       <ControlledPicker
         control={control}
         name="materialCalzada"
-        label="Material de la calzada"
+        label="Material de la calzada *"
         options={MATERIAL_CALZADA.map((x) => ({ label: x, value: x }))}
       />
 
@@ -731,11 +837,11 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <ControlledPicker
         control={control}
         name="tipoSiniestro"
-        label="Tipo de Siniestro"
+        label="Tipo de Siniestro *"
         options={TIPOS_SINIESTRO}
       />
 
-      {tipoSiniestro === 'COLISION' && (
+      {tipoSiniestro === 'COLISIÓN ENTRE VEHÍCULOS' && (
         <ControlledPicker
           control={control}
           name="tipoColision"
@@ -751,7 +857,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
         name="posiblesCausas"
         render={({ field }) => (
           <MultiSelectChips
-            label="Seleccionar causas"
+            label="Seleccionar causas *"
             value={field.value || []}
             options={POSIBLES_CAUSAS}
             onChange={field.onChange}
@@ -784,7 +890,7 @@ export const HechoVialFormRN: React.FC<Props> = ({
       <ControlledInput
         control={control}
         name="sintesis"
-        label="Síntesis del Hecho"
+        label="Síntesis del Hecho *"
         multiline
         placeholder="Ej. En fecha 09/12/2025 a hora 00:00 por comunicación SAME/911..."
       />
@@ -805,10 +911,10 @@ export const HechoVialFormRN: React.FC<Props> = ({
         placeholder="Colocar cuando se quiera describir algo importante acerca del hecho"
       />
 
-      <SeccionProtagonistasRN control={control} watch={watch} setValue={setValue} />
+      <SeccionProtagonistasRN control={control} watch={watch} setValue={setValue} clearErrors={clearErrors} />
       <SeccionPeatonRN control={control} setValue={setValue} />
 
-        <AppButton title="Generar Informe Oficial" icon="send" onPress={handleSubmit(onSubmit, scrollToTop)} />
+        <AppButton title="Generar Informe Oficial" icon="send" onPress={() => void submitHechoVial()} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -848,7 +954,7 @@ const UnidadIntervinienteCard = ({
 
   return (
     <Card>
-      <ControlledInput control={control} name={`unidades.${index}.unidad`} label="Unidad" />
+      <ControlledInput control={control} name={`unidades.${index}.unidad`} label="Unidad *" />
 
       <AppButton title="Eliminar unidad" icon="delete" variant="secondary" size="sm" onPress={onRemoveUnidad} />
 
@@ -874,7 +980,7 @@ const UnidadIntervinienteCard = ({
             name={`unidades.${index}.personal.${pIndex}.nombre`}
             render={({ field, fieldState }) => (
               <Input
-                label="Nombre"
+                label="Apellido y nombre *"
                 value={field.value ?? ''}
                 onChangeText={field.onChange}
                 error={fieldState.error?.message}
@@ -887,7 +993,7 @@ const UnidadIntervinienteCard = ({
             name={`unidades.${index}.personal.${pIndex}.jerarquia`}
             render={({ field, fieldState }) => (
               <Input
-                label="Jerarquía"
+                label="Jerarquía/cargo *"
                 value={field.value ?? ''}
                 onChangeText={field.onChange}
                 error={fieldState.error?.message}

@@ -1,9 +1,63 @@
 
 import { HechoVialForm, HechoVialListDto } from "./types";
+import type { Catalogos } from '../ubicacion/types';
 
 export function mapHechoVialListDtoToForm(
-  dto: HechoVialListDto
+  dto: HechoVialListDto,
+  catalogos?: Catalogos | null
 ): HechoVialForm {
+  const safeNumber = (value: unknown): number | undefined => {
+    if (value === null || value === undefined || value === '') {
+      return undefined;
+    }
+
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const normalize = (value: unknown): string => String(value ?? '').trim().toLocaleLowerCase('es-AR');
+
+  const resolveUnidadRegionalId = (): number | undefined => {
+    const raw = dto.ubicacionReq.unidadRegional;
+    const numeric = safeNumber(raw);
+    if (numeric !== undefined) return numeric;
+
+    const target = normalize(raw);
+    if (!target || !catalogos?.unidadesRegionales?.length) return undefined;
+
+    const matched = catalogos.unidadesRegionales.find((ur) => normalize(ur.nombre) === target);
+    return matched?.idUr;
+  };
+
+  const resolveDepartamento = (): string => {
+    const rawDepartamento = String(dto.ubicacionReq.departamento ?? '').trim();
+    if (rawDepartamento) return rawDepartamento;
+
+    const unidadRegionalId = resolveUnidadRegionalId();
+    if (unidadRegionalId === undefined || !catalogos?.unidadesRegionales?.length) return rawDepartamento;
+
+    const matched = catalogos.unidadesRegionales.find((ur) => ur.idUr === unidadRegionalId);
+    return matched?.departamentos[0]?.nombre ?? rawDepartamento;
+  };
+
+  const resolveLocalidadId = (): number | undefined => {
+    const raw = dto.ubicacionReq.localidad;
+    const numeric = safeNumber(raw);
+    if (numeric !== undefined) return numeric;
+
+    const target = normalize(raw);
+    if (!target || !catalogos?.unidadesRegionales?.length) return undefined;
+
+    for (const ur of catalogos.unidadesRegionales) {
+      for (const departamento of ur.departamentos) {
+        const match = departamento.localidades.find((localidad) => normalize(localidad.nombre) === target);
+        if (match) return match.id;
+      }
+    }
+
+    return undefined;
+  };
+
   // Si fecha viene como ISO: 2026-01-28T20:54:00
   const fechaISO = dto.fecha ?? '';
   const [fecha, horaCompleta] = fechaISO.split('T');
@@ -19,10 +73,10 @@ export function mapHechoVialListDtoToForm(
     ubicacionReq: {
       lat: dto.ubicacionReq.lat,
       lng: dto.ubicacionReq.lng,
-      departamento: dto.ubicacionReq.departamento,
-      localidad: dto.ubicacionReq.localidad,
-      unidadRegional: dto.ubicacionReq.unidadRegional,
-      descripcion: dto.ubicacionReq.descripcion,
+      departamento: resolveDepartamento(),
+      localidad: resolveLocalidadId(),
+      unidadRegional: resolveUnidadRegionalId(),
+      descripcion: String(dto.ubicacionReq.descripcion ?? ''),
     },
 
     victimaFatal: dto.victimaFatal as 'SI' | 'NO',

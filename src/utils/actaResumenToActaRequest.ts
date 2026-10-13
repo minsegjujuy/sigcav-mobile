@@ -30,8 +30,13 @@ function parseNumberId(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parseVehiculoId(value: unknown): number | undefined {
+  return parseNumberId(value);
+}
+
 export function actaResumenToActaRequest(acta: ActaResumenDto): ActaRequest {
   const infractor = { ...acta.infractor };
+  const vehiculoRaw: any = acta.vehiculo as any;
 
   const parsedFromNombre = splitApellidoNombrePorComa(infractor.nombre);
   if (parsedFromNombre) {
@@ -58,6 +63,12 @@ export function actaResumenToActaRequest(acta: ActaResumenDto): ActaRequest {
     parseNumberId(ub?.localidadId) ??
     parseNumberId(ub?.idLocalidad);
 
+  const vehiculoId =
+    parseVehiculoId(vehiculoRaw?.idVeh) ??
+    parseVehiculoId(vehiculoRaw?.idVehiculo) ??
+    parseVehiculoId(vehiculoRaw?.vehiculoId) ??
+    parseVehiculoId(vehiculoRaw?.id);
+
   return {
     idActa: acta.idActa,
     idGrupo: acta.idGrupo,
@@ -66,15 +77,27 @@ export function actaResumenToActaRequest(acta: ActaResumenDto): ActaRequest {
     motivo: acta.motivo,
     nro: acta.nro,
     articulos: acta.articulos.map((a) => a.idArt),
+    retencionLicencia: acta.retencionLicencia,
     infractor,
-    vehiculo: acta.vehiculo,
+    vehiculo: {
+      idVeh: vehiculoId,
+      marca: vehiculoRaw?.marca,
+      modelo: vehiculoRaw?.modelo,
+      dominio: vehiculoRaw?.dominio ?? '',
+      motor: vehiculoRaw?.motor,
+      cuadro: vehiculoRaw?.cuadro,
+      tipoRodado: vehiculoRaw?.tipoRodado,
+      propietario: vehiculoRaw?.propietario ?? null,
+      infractorPropietario: !!vehiculoRaw?.infractorPropietario,
+    },
     adjunta: acta.adjunta,
     retencion: acta.retencion,
-    retencionVehiculo: acta.retencionVehiculo,
     graduacionAlcoholica: acta.graduacionAlcoholica,
+    alcoholimetro: acta.alcoholimetroRequest,
     infractorFugado: acta.infractorFugado,
     juzgado: acta?.juzgado,
-    testigos: acta?.testigos,
+    testigos: acta?.testigos ?? [],
+    seNiegaAFirmar: acta.seNiegaAFirmar,
     ubicacionRequest: {
       departamento: acta.ubicacionResponse.departamento,
       lat: acta.ubicacionResponse.lat,
@@ -84,5 +107,6 @@ export function actaResumenToActaRequest(acta: ActaResumenDto): ActaRequest {
       localidad,
     },
     fecha: acta.fecha,
+    observaciones: acta.observaciones
   };
 }

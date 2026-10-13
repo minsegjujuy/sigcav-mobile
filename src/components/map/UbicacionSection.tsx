@@ -148,7 +148,7 @@ export function UbicacionSection({
 
           {ubicUnidadRegional ? (
             <SelectField
-              label="Localidad"
+              label="Localidad *"
               placeholder="Selecciona una localidad"
               value={ubicLocalidad}
               options={localidades.map((l) => ({
@@ -164,7 +164,7 @@ export function UbicacionSection({
       ) : null}
 
       <Field
-        label="describir ubicacion"
+        label="describir ubicacion *"
         value={ubicDescripcion}
         onChangeText={setUbicDescripcion}
       />

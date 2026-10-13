@@ -16,6 +16,44 @@ export const formatearFechaA_DDMMYYYY = (fechaString: string): string => {
   return `${dia}-${mes}-${anio}`;
 };
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+export function formatTimestamp(dateString: string): string {
+  const date = new Date(dateString);
+
+  if (isNaN(date.getTime())) {
+    throw new Error(`Fecha inválida: "${dateString}"`);
+  }
+
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  const hours = pad2(date.getHours());
+  const minutes = pad2(date.getMinutes());
+  const seconds = pad2(date.getSeconds());
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+}
+
+export function formatTimestamp2(dateString: string): string {
+  const date = new Date(dateString);
+
+  if (isNaN(date.getTime())) {
+    throw new Error(`Fecha inválida: "${dateString}"`);
+  }
+
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  const hours = pad2(date.getHours());
+  const minutes = pad2(date.getMinutes());
+  const seconds = pad2(date.getSeconds());
+
+  return `Fecha: ${day}-${month}-${year} - Hora: ${hours}:${minutes}`;
+}
+
 /**
  * Calcula la edad exacta en años a partir de una fecha de nacimiento (YYYY-MM-DD)
  * @param fechaNacimiento Ejemplo: "1999-06-24"

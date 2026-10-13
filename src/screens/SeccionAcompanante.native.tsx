@@ -1,11 +1,12 @@
-import React from 'react';
-import { Controller, useFieldArray, UseFormSetValue } from 'react-hook-form';
+import React, { useEffect } from 'react';
+import { Controller, useFieldArray, useWatch, UseFormSetValue } from 'react-hook-form';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AppButton } from '../components/ui/AppButton';
 import { DateFieldString, SelectFieldString } from '../components/ui/SelectedFieldString';
 import { styles } from '../components/ui/styles';
 import { calcularEdad } from '../utils/formatearFecha';
 import { HechoVialForm } from '../features/hechos-viales/types';
+import { ESTADO_SALUD, GENEROS, NACIONALIDADES, PROVINCIAS } from '../features/hechos-viales/values';
 
 const ErrorText = ({ message }: { message?: string | null }) => {
   if (!message) return null;
@@ -13,44 +14,7 @@ const ErrorText = ({ message }: { message?: string | null }) => {
 };
 
 const TIPOS_DOCUMENTO = ['DNI', 'LE', 'LC', 'CI'];
-const GENEROS = ['M', 'F', 'OTRO'];
-const NACIONALIDADES = [
-  'ARGENTINA',
-  'CHILENA',
-  'BOLIVIANA',
-  'PARAGUAYA',
-  'BRASILERA',
-  'PERUANA',
-  'VENEZOLANA',
-];
-const PROVINCIAS = [
-  'BUENOS_AIRES',
-  'CIUDAD_AUTONOMA_DE_BUENOS_AIRES',
-  'CATAMARCA',
-  'CHACO',
-  'CHUBUT',
-  'CORDOBA',
-  'CORRIENTES',
-  'ENTRE_RIOS',
-  'FORMOSA',
-  'JUJUY',
-  'LA_PAMPA',
-  'LA_RIOJA',
-  'MENDOZA',
-  'MISIONES',
-  'NEUQUEN',
-  'RIO_NEGRO',
-  'SALTA',
-  'SAN_JUAN',
-  'SAN_LUIS',
-  'SANTA_CRUZ',
-  'SANTA_FE',
-  'SANTIAGO_DEL_ESTERO',
-  'TIERRA_DEL_FUEGO',
-  'TUCUMAN',
-  'N/A',
-];
-const ESTADO_SALUD = ['SIN LESIONES', 'HERIDO LEVE', 'HERIDO GRAVE', 'FALLECIDO'];
+
 
 interface Props {
   pIndex: number;
@@ -73,8 +37,12 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setVal
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.nombre`} label="Apellido y Nombre" />
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.tipo`} label="Tipo Documento" items={TIPOS_DOCUMENTO} />
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.numeroDocumento`} label="Nro" keyboardType="numeric" />
-          <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.nacionalidad`} label="Nacionalidad" items={NACIONALIDADES} />
-          <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.provincia`} label="Provincia" items={PROVINCIAS} />
+          <NacionalidadProvinciaFields
+            control={control}
+            setValue={setValue}
+            nacionalidadName={`protagonistas.${pIndex}.acompanantes.${aIndex}.nacionalidad`}
+            provinciaName={`protagonistas.${pIndex}.acompanantes.${aIndex}.provincia`}
+          />
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.localidad`} label="Localidad" />
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.domicilio`} label="Domicilio" />
           <Controller
@@ -118,7 +86,6 @@ export const SeccionAcompanantesRN: React.FC<Props> = ({ pIndex, control, setVal
 
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.genero`} label="Género" items={GENEROS} />
           <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.trasladado`} label="Traslado (Hospital/SAME)" multiline />
-          <ControlledInput control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.descripcion`} label="Descripcion de la persona" multiline />
           <ControlledPicker control={control} name={`protagonistas.${pIndex}.acompanantes.${aIndex}.estadoSalud`} label="Estado de salud" items={ESTADO_SALUD} />
 
           <AppButton
@@ -229,6 +196,35 @@ const ControlledPicker = ({
     }}
   />
 );
+
+const NacionalidadProvinciaFields = ({
+  control,
+  setValue,
+  nacionalidadName,
+  provinciaName,
+}: {
+  control: any;
+  setValue: UseFormSetValue<HechoVialForm>;
+  nacionalidadName: `protagonistas.${number}.acompanantes.${number}.nacionalidad`;
+  provinciaName: `protagonistas.${number}.acompanantes.${number}.provincia`;
+}) => {
+  const nacionalidad = useWatch({ control, name: nacionalidadName });
+  const mostrarProvincia = String(nacionalidad ?? '').trim() === 'ARGENTINA';
+
+  useEffect(() => {
+    if (mostrarProvincia) return;
+    setValue(provinciaName, '', { shouldDirty: true, shouldValidate: true });
+  }, [mostrarProvincia, provinciaName, setValue]);
+
+  return (
+    <>
+      <ControlledPicker control={control} name={nacionalidadName} label="Nacionalidad" items={NACIONALIDADES} />
+      {mostrarProvincia ? (
+        <ControlledPicker control={control} name={provinciaName} label="Provincia" items={PROVINCIAS} />
+      ) : null}
+    </>
+  );
+};
 
 const BooleanField = ({
   control,

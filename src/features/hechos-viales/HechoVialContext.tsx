@@ -14,6 +14,8 @@ export const emptyHechoVial: HechoVialForm = {
   id: undefined,
   fecha: '',
   zona: '',
+  deLosHechos: '',
+  nota: '',
 
   victimaFatal: '',
   danosMateriales: '',

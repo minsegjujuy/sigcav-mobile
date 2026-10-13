@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { Pressable, View, Modal, Text, ScrollView } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { styles } from "./styles";
 import { AppButton } from "./AppButton";
+import { styles } from "./styles";
 
 export function SelectField({
   label,
@@ -23,7 +23,6 @@ export function SelectField({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const insets = useSafeAreaInsets();
-
   const selected = useMemo(() => options.find((o) => o.value === value) ?? null, [options, value]);
 
   return (
@@ -33,10 +32,7 @@ export function SelectField({
         <Pressable
           onPress={() => setIsOpen(true)}
           disabled={disabled}
-          style={[
-            styles.selectBox,
-            disabled ? { opacity: 0.6 } : null,
-          ]}
+          style={[styles.selectBox, disabled ? { opacity: 0.6 } : null]}
         >
           <Text style={selected ? styles.selectText : styles.selectPlaceholder} numberOfLines={1}>
             {selected ? selected.label : placeholder}
@@ -51,7 +47,7 @@ export function SelectField({
           <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
                 {allowClear ? (
                   <AppButton title="Limpiar" icon="close" variant="secondary" size="sm" onPress={() => onChangeValue(null)} />
                 ) : null}
@@ -104,7 +100,6 @@ export function SelectFieldString({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const insets = useSafeAreaInsets();
-
   const selected = useMemo(() => options.find((o) => o.value === value) ?? null, [options, value]);
 
   return (
@@ -125,7 +120,7 @@ export function SelectFieldString({
           <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
                 {allowClear ? (
                   <AppButton
                     title="Limpiar"
@@ -169,16 +164,15 @@ export function SelectFieldString({
 }
 
 function pad2(n: number): string {
-  return String(n).padStart(2, '0');
+  return String(n).padStart(2, "0");
 }
 
 function daysInMonth(year: number, month: number): number {
-  // month: 1-12
   return new Date(year, month, 0).getDate();
 }
 
 function parseIsoDate(value: string | null | undefined): { year: number; month: number; day: number } | null {
-  const raw = (value ?? '').trim();
+  const raw = (value ?? "").trim();
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
   if (!m) return null;
   const year = Number(m[1]);
@@ -212,56 +206,38 @@ export function DateFieldString({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const insets = useSafeAreaInsets();
-
   const parsed = useMemo(() => parseIsoDate(value), [value]);
-
-  const [step, setStep] = useState<'year' | 'month' | 'day'>(() => (parsed ? 'day' : 'year'));
-  const [year, setYear] = useState<number | null>(() => parsed?.year ?? null);
-  const [month, setMonth] = useState<number | null>(() => parsed?.month ?? null);
-  const [day, setDay] = useState<number | null>(() => parsed?.day ?? null);
+  const [dayText, setDayText] = useState("");
+  const [monthText, setMonthText] = useState("");
+  const [yearText, setYearText] = useState("");
 
   const selectedText = useMemo(() => {
     if (parsed) return `${pad2(parsed.day)}-${pad2(parsed.month)}-${parsed.year}`;
     return null;
   }, [parsed]);
 
-  const years = useMemo(() => {
-    const out: number[] = [];
-    const from = Math.max(1, minYear);
-    const to = Math.max(from, maxYear);
-    for (let y = to; y >= from; y--) out.push(y);
-    return out;
-  }, [maxYear, minYear]);
-
-  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
-
-  const days = useMemo(() => {
-    if (!year || !month) return [];
-    const maxDay = daysInMonth(year, month);
-    return Array.from({ length: maxDay }, (_, i) => i + 1);
-  }, [month, year]);
-
   function open() {
     if (disabled) return;
     const p = parseIsoDate(value);
-    setYear(p?.year ?? null);
-    setMonth(p?.month ?? null);
-    setDay(p?.day ?? null);
-    setStep(p ? 'day' : 'year');
+    setDayText(p ? pad2(p.day) : "");
+    setMonthText(p ? pad2(p.month) : "");
+    setYearText(p ? String(p.year) : "");
     setIsOpen(true);
   }
 
-  function applyAndClose(next: { year: number; month: number; day: number }) {
-    onChangeValue(`${next.year}-${pad2(next.month)}-${pad2(next.day)}`);
+  function applyAndClose() {
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+
+    if (![year, month, day].every((n) => Number.isFinite(n))) return;
+    if (year < minYear || year > maxYear) return;
+    if (month < 1 || month > 12) return;
+    if (day < 1 || day > daysInMonth(year, month)) return;
+
+    onChangeValue(`${year}-${pad2(month)}-${pad2(day)}`);
     setIsOpen(false);
   }
-
-  const headerSubtitle = useMemo(() => {
-    if (!year) return 'Seleccioná el año';
-    if (!month) return `Año: ${year} · Seleccioná el mes`;
-    if (!day) return `Año: ${year} · Mes: ${pad2(month)} · Seleccioná el día`;
-    return `Año: ${year} · Mes: ${pad2(month)} · Día: ${pad2(day)}`;
-  }, [day, month, year]);
 
   return (
     <>
@@ -280,28 +256,10 @@ export function DateFieldString({
           <Pressable style={{ flex: 1 }} onPress={() => setIsOpen(false)} />
           <View style={[styles.modalSheet, { paddingBottom: 12 + insets.bottom }]}>
             <View style={styles.modalHeader}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.modalTitle}>{label}</Text>
-                <Text style={styles.helperText}>{headerSubtitle}</Text>
+              <View style={{ flex: 1, width: '100%' }}>
+                <Text style={[styles.modalTitle, { width: '100%' }]}>{label}</Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                {step !== 'year' ? (
-                  <AppButton
-                    title="Atrás"
-                    icon="arrow-back"
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => {
-                      if (step === 'day') {
-                        setDay(null);
-                        setStep('month');
-                      } else if (step === 'month') {
-                        setMonth(null);
-                        setStep('year');
-                      }
-                    }}
-                  />
-                ) : null}
+              <View style={{ flexDirection: "row", gap: 10 }}>
                 {allowClear ? (
                   <AppButton
                     title="Limpiar"
@@ -310,77 +268,56 @@ export function DateFieldString({
                     size="sm"
                     onPress={() => {
                       onChangeValue(null);
+                      setDayText("");
+                      setMonthText("");
+                      setYearText("");
                       setIsOpen(false);
                     }}
                   />
                 ) : null}
+                <AppButton title="Aplicar" icon="check" size="sm" onPress={applyAndClose} />
                 <AppButton title="Cerrar" icon="close" variant="ghost" size="sm" onPress={() => setIsOpen(false)} />
               </View>
             </View>
 
             <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}>
-              <View style={{ gap: 8 }}>
-                {step === 'year'
-                  ? years.map((y) => {
-                      const isActive = y === year;
-                      return (
-                        <Pressable
-                          key={y}
-                          style={[styles.optionRow, isActive ? styles.optionRowActive : null]}
-                          onPress={() => {
-                            setYear(y);
-                            setMonth(null);
-                            setDay(null);
-                            setStep('month');
-                          }}
-                        >
-                          <Text style={styles.optionText}>{y}</Text>
-                        </Pressable>
-                      );
-                    })
-                  : null}
-
-                {step === 'month'
-                  ? months.map((m) => {
-                      const isActive = m === month;
-                      return (
-                        <Pressable
-                          key={m}
-                          style={[styles.optionRow, isActive ? styles.optionRowActive : null]}
-                          onPress={() => {
-                            setMonth(m);
-                            setDay(null);
-                            setStep('day');
-                          }}
-                        >
-                          <Text style={styles.optionText}>{pad2(m)}</Text>
-                        </Pressable>
-                      );
-                    })
-                  : null}
-
-                {step === 'day'
-                  ? days.map((d) => {
-                      const isActive = d === day;
-                      return (
-                        <Pressable
-                          key={d}
-                          style={[styles.optionRow, isActive ? styles.optionRowActive : null]}
-                          onPress={() => {
-                            setDay(d);
-                            if (year && month) applyAndClose({ year, month, day: d });
-                          }}
-                        >
-                          <Text style={styles.optionText}>{pad2(d)}</Text>
-                        </Pressable>
-                      );
-                    })
-                  : null}
+              <View style={{ gap: 12 }}>
+                <DateInputRow label="Día" value={dayText} placeholder="DD" maxLength={2} onChangeText={setDayText} />
+                <DateInputRow label="Mes" value={monthText} placeholder="MM" maxLength={2} onChangeText={setMonthText} />
+                <DateInputRow label="Año" value={yearText} placeholder="AAAA" maxLength={4} onChangeText={setYearText} />
               </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
     </>
+  );
+}
+
+function DateInputRow({
+  label,
+  value,
+  placeholder,
+  maxLength,
+  onChangeText,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  maxLength: number;
+  onChangeText: (value: string) => void;
+}) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        keyboardType="numeric"
+        placeholder={placeholder}
+        maxLength={maxLength}
+        onChangeText={(text) => onChangeText(text.replace(/\D/g, "").slice(0, maxLength))}
+      />
+    </View>
   );
 }

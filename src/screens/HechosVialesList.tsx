@@ -17,6 +17,7 @@ import { HechoVialListDto } from '../features/hechos-viales/types';
 import HechoVialDetalle from './HechoVialDetails';
 import { useHechoVial } from '../features/hechos-viales/HechoVialContext';
 import { useAuth } from '../auth/AuthContext';
+import { useCatalogos } from '../api/hooks/catalogos';
 import { AppButton } from '../components/ui/AppButton';
 import { Field } from '../components/ui/Field';
 import { Section } from '../components/ui/Section';
@@ -177,6 +178,7 @@ export default function HechosVialesScreen({
 }) {
   const { setHechoVial } = useHechoVial();
   const { jwt } = useAuth();
+  const { data: catalogos } = useCatalogos();
 
   const [data, setData] = useState<HechoVialListDto[]>([]);
   const [page, setPage] = useState(0);
@@ -246,7 +248,8 @@ export default function HechosVialesScreen({
   };
 
   const editar = (hecho: HechoVialListDto) => {
-    setHechoVial(mapHechoVialListDtoToForm(hecho));
+    console.log('Hecho vial list dto raw edit:', hecho);
+    setHechoVial(mapHechoVialListDtoToForm(hecho, catalogos));
     onEditHechoVial?.(hecho);
     navigation?.navigate?.('nuevo_hecho_vial', { id: hecho.id });
   };

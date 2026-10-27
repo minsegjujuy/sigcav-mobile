@@ -19,9 +19,9 @@ import { MapaJujuyLeaflet } from '../components/map/MapaJujuyLeaflet';
 import { findDepartamento } from '../features/geo/findDepartamento';
 import { DEPARTAMENTOS_JUJUY } from '../features/geo/jujuyGeoJson';
 import { MultiSelectPicker } from '../components/forms/MultiSelectPicker';
-import { findInfractorByDni } from '../services/InfractorService';
+import { findInfractorByDni, findPropietarioByDni } from '../services/InfractorService';
 import { HttpError } from '../api/http';
-import type { Licencia, Vehiculo as VehiculoBackend } from '../features/infractores/types';
+import type { Infractor, Licencia, Vehiculo as VehiculoBackend } from '../features/infractores/types';
 // import { SignaturePadSkia } from '../components/signature/SignaturePadSkia';
 import { PhotoPicker, type PhotoValue } from '../components/media/PhotoPicker';
 import { OcrService } from '../services/OcrService';
@@ -41,11 +41,31 @@ import { Divider } from 'react-native-paper';
 import { PickerField } from '../components/forms/PickerField';
 import { SkeletonForm } from '../components/ui/skeleton/SkeletonForm';
 import { siNo } from '../features/hechos-viales/generarTextoHechoVial';
-import { useCatalogos } from '../api/hooks/catalogos';
-import { TIPO_RODADO_ACTA } from '../features/hechos-viales/values';
+import { useCatalogos, useCatalogosModelos, useCatalogosNuevos } from '../api/hooks/catalogos';
 
 type ActaFormTabKey = 'acta' | 'infractor' | 'vehiculo' | 'firma';
 type DatePickerTarget = 'acta_fecha' | 'infractor_nacimiento' | 'licencia_expedicion' | 'licencia_vencimiento';
+
+function normalizeCatalogId(value: unknown): number | null {
+  const id = Number(value);
+  return Number.isFinite(id) ? id : null;
+}
+
+function normalizeCatalogDescription(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const item = value as { descripcion?: unknown; nombre?: unknown };
+    return String(item.descripcion ?? item.nombre ?? '');
+  }
+  return '';
+}
+
+function formatDateInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
 
 function createBlankTestigo(): TestigoRequest {
   return { nombre: '', apellido: '', dni: '', domicilio: '' };
@@ -59,6 +79,17 @@ function createBlankLicencia(): NonNullable<InfractorSolicitud['licencia']> {
     autoridadExpedicion: '',
     fechaExpedicion: '',
     fechaVencimiento: '',
+  };
+}
+
+function createBlankPropietario(): NonNullable<ActaRequest['vehiculo']['propietario']> {
+  return {
+    nombre: '',
+    dni: '',
+    direccion: '',
+    localidad: '',
+    provincia: '',
+    nacionalidadId: 0,
   };
 }
 
@@ -82,6 +113,14 @@ function createInitialActaForm(): ActaRequest {
       fechaNacimiento: '',
       localidad: '',
       provincia: '',
+      localidadId: null,
+      provinciaId: null,
+      departamentoId: null,
+      idLocalidad: null,
+      idProvincia: null,
+      idDepartamento: null,
+      idPais: null,
+      sexo: null,
       licencia: null,
     },
     vehiculo: {
@@ -151,6 +190,8 @@ export function NuevaActaScreen({
   const [puestos, setPuestos] = useState<Puesto[]>([]);
   const [juzgados, setJuzgados] = useState<Juzgado[]>([]);
   const { data: catalogos } = useCatalogos();
+  const { data: catalogosNuevos } = useCatalogosNuevos();
+  const { data: catalogosModelos } = useCatalogosModelos();
   const isLoadingCatalogs = !catalogos;
   const catalogsError = null;
 
@@ -210,7 +251,27 @@ export function NuevaActaScreen({
 
   const infractorNacionalidad = formData.infractor.nacionalidad;
   const setInfractorNacionalidad = (value: string) => {
-    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, nacionalidad: value } }));
+    const esArgentina = value.trim().toUpperCase() === 'ARGENTINA';
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        nacionalidad: value,
+        idPais: catalogosNuevos?.paises.find((pais) => pais.nombre.trim().toUpperCase() === value.trim().toUpperCase())?.idPais ?? null,
+        ...(!esArgentina
+          ? {
+              localidad: '',
+              provincia: null,
+              localidadId: null,
+              provinciaId: null,
+              departamentoId: null,
+              idLocalidad: null,
+              idProvincia: null,
+              idDepartamento: null,
+            }
+          : {}),
+      },
+    }));
   };
 
   const infractorDomicilio = formData.infractor.domicilio;
@@ -223,9 +284,73 @@ export function NuevaActaScreen({
     setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, localidad: value } }));
   };
 
-  const infractorProvincia = formData.infractor.provincia;
+  const infractorProvincia = formData.infractor.provincia ?? '';
   const setInfractorProvincia = (value: string) => {
     setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, provincia: value } }));
+  };
+
+  const infractorLocalidadId = formData.infractor.localidadId ?? formData.infractor.idLocalidad ?? null;
+  const infractorProvinciaId = formData.infractor.provinciaId ?? formData.infractor.idProvincia ?? null;
+  const infractorDepartamentoId = formData.infractor.departamentoId ?? formData.infractor.idDepartamento ?? null;
+  const infractorSexo = formData.infractor.sexo ?? null;
+  const infractorPaisId = formData.infractor.idPais ?? null;
+  const esNacionalidadArgentina = infractorNacionalidad.trim().toUpperCase() === 'ARGENTINA';
+
+  const setInfractorProvinciaId = (value: number | null) => {
+    const provincia = catalogosNuevos?.provincias.find(
+      (item) => normalizeCatalogId(item.idProvincia ?? item.id_provincia) === value
+    );
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        provinciaId: value,
+        idProvincia: value,
+        departamentoId: null,
+        idDepartamento: null,
+        localidadId: null,
+        idLocalidad: null,
+        provincia: provincia?.nombre ?? null,
+        localidad: '',
+      },
+    }));
+  };
+
+  const setInfractorDepartamentoId = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        departamentoId: value,
+        idDepartamento: value,
+        localidadId: null,
+        idLocalidad: null,
+        localidad: '',
+      },
+    }));
+  };
+
+  const setInfractorLocalidadId = (value: number | null) => {
+    const localidad = catalogosNuevos?.localidades.find(
+      (item) => normalizeCatalogId(item.idLocalidad ?? item.id_localidad) === value
+    );
+    setFormData((prev) => ({
+      ...prev,
+      infractor: {
+        ...prev.infractor,
+        localidadId: value,
+        idLocalidad: value,
+        localidad: localidad?.nombre ?? '',
+      },
+    }));
+  };
+
+  const setInfractorSexo = (value: string | null) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, sexo: value } }));
+  };
+
+  const setInfractorPaisId = (value: number | null) => {
+    setFormData((prev) => ({ ...prev, infractor: { ...prev.infractor, idPais: value } }));
   };
 
   const infractorPropietario = formData.vehiculo.infractorPropietario;
@@ -333,6 +458,58 @@ export function NuevaActaScreen({
     setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, tipoRodado: value } }));
   };
 
+  const vehiculoTipoId = formData.vehiculo.idTipoVehiculo ?? null;
+  const vehiculoMarcaId = formData.vehiculo.idMarca ?? null;
+  const vehiculoModeloId = formData.vehiculo.idModelo ?? null;
+
+  const setVehiculoTipoId = (value: number | null) => {
+    const tipo = catalogosNuevos?.tiposVehiculo.find(
+      (item) => normalizeCatalogId(item.idTipoVehiculo ?? item.id_tipo_vehiculo ?? item.id_tipovehiculo) === value
+    );
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        idTipoVehiculo: value ?? undefined,
+        idMarca: undefined,
+        idModelo: undefined,
+        marca: '',
+        modelo: '',
+        tipoRodado: value == null ? '' : tipo?.nombre ?? prev.vehiculo.tipoRodado ?? '',
+      },
+    }));
+  };
+
+  const setVehiculoMarcaId = (value: number | null) => {
+    const marca = catalogosNuevos?.marcas.find(
+      (item) => normalizeCatalogId(item.idMarca ?? item.id_marca) === value
+    );
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        idMarca: value ?? undefined,
+        idModelo: undefined,
+        marca: value == null ? '' : marca?.nombre ?? prev.vehiculo.marca ?? '',
+        modelo: '',
+      },
+    }));
+  };
+
+  const setVehiculoModeloId = (value: number | null) => {
+    const modelo = catalogosModelos?.find(
+      (item) => normalizeCatalogId(item.idModelo ?? item.id_modelo) === value
+    );
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        idModelo: value ?? undefined,
+        modelo: value == null ? '' : modelo?.nombre ?? prev.vehiculo.modelo ?? '',
+      },
+    }));
+  };
+
   const vehiculoIdVeh = formData.vehiculo.idVeh ?? null;
   const setVehiculoIdVeh = (value: number | null) => {
     setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, idVeh: value ?? undefined } }));
@@ -340,6 +517,10 @@ export function NuevaActaScreen({
 
   const [vehiculosEncontrados, setVehiculosEncontrados] = useState<VehiculoBackend[]>([]);
   const [vehiculoSeleccionadoId, setVehiculoSeleccionadoId] = useState<number | null>(null);
+  const [propietarioDniInput, setPropietarioDniInput] = useState('');
+  const propietarioDniSearchRef = useRef(false);
+  const [isSearchingPropietario, setIsSearchingPropietario] = useState(false);
+  const [propietarioSearchMessage, setPropietarioSearchMessage] = useState<string | null>(null);
   const propietarioNombre = formData.vehiculo.propietario?.nombre || '';
   const setPropietarioNombre = (value: string) => {
     setFormData((prev) => ({
@@ -347,13 +528,7 @@ export function NuevaActaScreen({
       vehiculo: {
         ...prev.vehiculo,
         propietario: {
-          ...(prev.vehiculo.propietario ?? {
-            nombre: '',
-            dni: '',
-            direccion: '',
-            localidad: '',
-            provincia: '',
-          }),
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
           nombre: value,
         },
       },
@@ -367,33 +542,22 @@ export function NuevaActaScreen({
       vehiculo: {
         ...prev.vehiculo,
         propietario: {
-          ...(prev.vehiculo.propietario ?? {
-            nombre: '',
-            dni: '',
-            direccion: '',
-            localidad: '',
-            provincia: '',
-          }),
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
           apellido: value,
         },
       },
     }));
   };
 
-  const propietarioDni = formData.vehiculo.propietario?.dni || '';
+  const propietarioDni = propietarioDniInput;
   const setPropietarioDni = (value: string) => {
+    setPropietarioDniInput(value);
     setFormData((prev) => ({
       ...prev,
       vehiculo: {
         ...prev.vehiculo,
         propietario: {
-          ...(prev.vehiculo.propietario ?? {
-            nombre: '',
-            dni: '',
-            direccion: '',
-            localidad: '',
-            provincia: '',
-          }),
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
           dni: value,
         },
       },
@@ -407,13 +571,7 @@ export function NuevaActaScreen({
       vehiculo: {
         ...prev.vehiculo,
         propietario: {
-          ...(prev.vehiculo.propietario ?? {
-            nombre: '',
-            dni: '',
-            direccion: '',
-            localidad: '',
-            provincia: '',
-          }),
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
           direccion: value,
         },
       },
@@ -427,13 +585,7 @@ export function NuevaActaScreen({
       vehiculo: {
         ...prev.vehiculo,
         propietario: {
-          ...(prev.vehiculo.propietario ?? {
-            nombre: '',
-            dni: '',
-            direccion: '',
-            localidad: '',
-            provincia: '',
-          }),
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
           localidad: value,
         },
       },
@@ -447,18 +599,138 @@ export function NuevaActaScreen({
       vehiculo: {
         ...prev.vehiculo,
         propietario: {
-          ...(prev.vehiculo.propietario ?? {
-            nombre: '',
-            dni: '',
-            direccion: '',
-            localidad: '',
-            provincia: '',
-          }),
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
           provincia: value,
         },
       },
     }));
   };
+
+  const propietarioFechaNacimiento = formData.vehiculo.propietario?.fechaNacimiento || '';
+  const propietarioNacionalidadId = formData.vehiculo.propietario?.nacionalidadId ?? null;
+  const setPropietarioFechaNacimiento = (value: string) => {
+    const formattedValue = formatDateInput(value);
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: {
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
+          fechaNacimiento: formattedValue,
+        },
+      },
+    }));
+  };
+
+  const handlePropietarioDniChange = (value: string) => {
+    const dni = value.replace(/\D/g, '').slice(0, 8);
+    propietarioDniSearchRef.current = true;
+    setPropietarioDniInput(dni);
+    setPropietarioSearchMessage(null);
+
+    if (dni.length < 8) {
+      setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, propietario: null } }));
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: {
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
+          dni,
+        },
+      },
+    }));
+  };
+
+  const setPropietarioNacionalidadId = (value: number | null) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculo: {
+        ...prev.vehiculo,
+        propietario: {
+          ...(prev.vehiculo.propietario ?? createBlankPropietario()),
+          nacionalidadId: value ?? 0,
+          ...(value !== argentinaPaisId
+            ? { provincia: '', localidad: '' }
+            : {}),
+        },
+      },
+    }));
+  };
+
+  useEffect(() => {
+    if (!propietarioDniSearchRef.current) return;
+    propietarioDniSearchRef.current = false;
+
+    if (propietarioDni.length !== 8) return;
+
+    let cancelled = false;
+    setIsSearchingPropietario(true);
+    setPropietarioSearchMessage(null);
+
+    void findPropietarioByDni(propietarioDni, jwt)
+      .then((data) => {
+        if (cancelled) return;
+
+        const propietarioData = data as Infractor & {
+          direccion?: string | null;
+          nacionalidadId?: number | null;
+          nacionalidad_id?: number | null;
+          localidadDescripcion?: string | null;
+          provinciaDescripcion?: string | null;
+          fecha_nacimiento?: string | null;
+        };
+        const nombreCompleto = splitApellidoNombrePorComa(propietarioData.nombre);
+        const nacionalidadId = normalizeCatalogId(
+          propietarioData.nacionalidadId ?? propietarioData.nacionalidad_id ?? propietarioData.idPais
+        );
+        const localidad = normalizeCatalogDescription(propietarioData.localidad)
+          || propietarioData.localidadDescripcion
+          || '';
+        const provincia = normalizeCatalogDescription(propietarioData.provincia)
+          || propietarioData.provinciaDescripcion
+          || '';
+
+        setFormData((prev) => ({
+          ...prev,
+          vehiculo: {
+            ...prev.vehiculo,
+            propietario: {
+              nombre: nombreCompleto?.nombre ?? propietarioData.nombre ?? '',
+              apellido: propietarioData.apellido ?? nombreCompleto?.apellido ?? '',
+              dni: propietarioData.dni ?? propietarioDni,
+              direccion: propietarioData.direccion ?? propietarioData.domicilio ?? '',
+              localidad,
+              provincia,
+              nacionalidadId: nacionalidadId ?? 0,
+              fechaNacimiento: propietarioData.fechaNacimiento ?? propietarioData.fecha_nacimiento ?? null,
+            },
+          },
+        }));
+        setPropietarioSearchMessage('Propietario encontrado.');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setFormData((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, propietario: null } }));
+        setPropietarioSearchMessage(
+          error instanceof HttpError && error.status === 404
+            ? 'Propietario no encontrado, continue completando los datos.'
+            : error instanceof Error
+              ? error.message
+              : 'Error buscando propietario.'
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsSearchingPropietario(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [propietarioDni, jwt]);
 
   const ubicLat = String(formData.ubicacionRequest.lat || '');
   const setUbicLat = (value: string) => {
@@ -782,12 +1054,16 @@ export function NuevaActaScreen({
       setSaveActaMessage('Falta completar el Domicilio del infractor.');
       return false;
     }
-    if (!infractorLocalidad.trim()) {
-      setSaveActaMessage('Falta completar la Localidad del infractor.');
+    if (esNacionalidadArgentina && !infractorProvinciaId) {
+      setSaveActaMessage('Falta seleccionar la Provincia del infractor.');
       return false;
     }
-    if (!infractorProvincia.trim()) {
-      setSaveActaMessage('Falta completar la Provincia del infractor.');
+    if (esNacionalidadArgentina && !infractorDepartamentoId) {
+      setSaveActaMessage('Falta seleccionar el Departamento del infractor.');
+      return false;
+    }
+    if (esNacionalidadArgentina && !infractorLocalidadId) {
+      setSaveActaMessage('Falta seleccionar la Localidad del infractor.');
       return false;
     }
     if (!infractorFechaNacimiento.trim()) {
@@ -825,6 +1101,18 @@ export function NuevaActaScreen({
       }
       if (!propietarioDireccion.trim()) {
         setSaveActaMessage('Falta completar la Dirección del propietario.');
+        return false;
+      }
+      if (!propietarioNacionalidadId) {
+        setSaveActaMessage('Falta seleccionar la Nacionalidad del propietario.');
+        return false;
+      }
+      if (propietarioEsArgentina && !propietarioProvincia.trim()) {
+        setSaveActaMessage('Falta seleccionar la Provincia del propietario.');
+        return false;
+      }
+      if (propietarioEsArgentina && !propietarioLocalidad.trim()) {
+        setSaveActaMessage('Falta seleccionar la Localidad del propietario.');
         return false;
       }
     }
@@ -949,6 +1237,10 @@ export function NuevaActaScreen({
       setPropietarioApellido('');
       setPropietarioDni('');
       setPropietarioDireccion('');
+      setPropietarioLocalidad('');
+      setPropietarioProvincia('');
+      setPropietarioNacionalidadId(null);
+      setPropietarioFechaNacimiento('');
     }
   }, [infractorPropietario]);
 
@@ -974,11 +1266,19 @@ export function NuevaActaScreen({
       setPropietarioApellido(prop?.apellido ?? '');
       setPropietarioDni(prop?.dni ?? '');
       setPropietarioDireccion(prop?.direccion ?? '');
+      setPropietarioLocalidad(prop?.localidad ?? '');
+      setPropietarioProvincia(prop?.provincia ?? '');
+      setPropietarioNacionalidadId(prop?.nacionalidadId ?? null);
+      setPropietarioFechaNacimiento(prop?.fechaNacimiento ?? '');
     } else {
       setPropietarioNombre('');
       setPropietarioApellido('');
       setPropietarioDni('');
       setPropietarioDireccion('');
+      setPropietarioLocalidad('');
+      setPropietarioProvincia('');
+      setPropietarioNacionalidadId(null);
+      setPropietarioFechaNacimiento('');
     }
   }, [vehiculoSeleccionadoId, vehiculosEncontrados]);
 
@@ -994,25 +1294,36 @@ export function NuevaActaScreen({
     setIsSearchingInfractor(true);
     try {
       const data = await findInfractorByDni(dni, jwt);
+      const localidadId = data.localidadId ?? null;
+      const provinciaId = data.provinciaId ?? null;
+      const departamentoId = data.departamentoId ?? null;
+      const nacionalidad = data.nacionalidad ?? '';
+      const esArgentina = nacionalidad.trim().toUpperCase() === 'ARGENTINA';
 
       const isInfractorOwner = data.propietario ?? true;
       const vehiculosFromBackend = data.vehiculos ?? [];
       //const licencia = (data.licencias ?? [])[0] ?? null;
-      setLicencias(data.licencias);
+      setLicencias(data.licencias ?? []);
 
       const normalized = normalizeInfractorNombreApellido({
         nombre: data.nombre ?? '',
         apellido: data.apellido ?? '',
       });
 
+      // El backend puede devolver un infractor válido sin id persistido.
       setInfractorIdInfrac(data.idInfrac ?? null);
       setInfractorNombre(normalized.nombre);
       setInfractorApellido(normalized.apellido);
       setInfractorDni(data.dni ?? dni);
       setInfractorDomicilio(data.domicilio ?? '');
-      setInfractorNacionalidad((data.nacionalidad ?? '') || '');
+      setInfractorNacionalidad(nacionalidad);
       setInfractorLocalidad((data.localidad ?? '') || '');
       setInfractorProvincia((data.provincia ?? '') || '');
+      setInfractorPaisId(data.idPais ?? null);
+      setInfractorProvinciaId(esArgentina ? provinciaId : null);
+      setInfractorDepartamentoId(esArgentina ? departamentoId : null);
+      setInfractorLocalidadId(esArgentina ? localidadId : null);
+      setInfractorSexo(data.sexo ?? null);
       setInfractorFechaNacimiento(data.fechaNacimiento ?? '');
 
       setVehiculosEncontrados(vehiculosFromBackend);
@@ -1043,6 +1354,8 @@ export function NuevaActaScreen({
           setPropietarioDireccion(prop?.direccion ?? '');
           setPropietarioLocalidad(prop?.localidad ?? '');
           setPropietarioProvincia(prop?.provincia ?? '');
+          setPropietarioNacionalidadId(prop?.nacionalidadId ?? null);
+          setPropietarioFechaNacimiento(prop?.fechaNacimiento ?? '');
         }
       } else {
         // Se completa el formulario de vehiculo recien cuando se selecciona uno
@@ -1212,9 +1525,14 @@ export function NuevaActaScreen({
     setInfractorApellido(inf?.apellido ?? '');
     setInfractorDni(inf?.dni ?? '');
     setInfractorNacionalidad(inf?.nacionalidad ?? '');
+    setInfractorPaisId(inf?.idPais ?? null);
     setInfractorDomicilio(inf?.domicilio ?? '');
     setInfractorLocalidad(inf?.localidad ?? '');
     setInfractorProvincia(inf?.provincia ?? '');
+    setInfractorProvinciaId(inf?.provinciaId ?? inf?.idProvincia ?? null);
+    setInfractorDepartamentoId(inf?.departamentoId ?? inf?.idDepartamento ?? null);
+    setInfractorLocalidadId(inf?.localidadId ?? inf?.idLocalidad ?? null);
+    setInfractorSexo(inf?.sexo ?? null);
     setInfractorFechaNacimiento(inf?.fechaNacimiento ?? '');
     setInfractorPropietario(!prop);
 
@@ -1233,13 +1551,19 @@ export function NuevaActaScreen({
     setVehiculoMarca((veh?.marca ?? '') as any);
     setVehiculoModelo((veh?.modelo ?? '') as any);
     setVehiculoTipoRodado(veh?.tipoRodado ?? '');
+    setVehiculoTipoId(normalizeCatalogId(veh?.idTipoVehiculo ?? veh?.id_tipo_vehiculo));
+    setVehiculoMarcaId(normalizeCatalogId(veh?.idMarca ?? veh?.id_marca));
+    setVehiculoModeloId(normalizeCatalogId(veh?.idModelo ?? veh?.id_modelo));
 
-    setPropietarioNombre(prop?.nombre ?? '');
-    setPropietarioApellido(prop?.apellido ?? '');
+    const propietarioNombreCompleto = splitApellidoNombrePorComa(prop?.nombre);
+    setPropietarioNombre(propietarioNombreCompleto?.nombre ?? prop?.nombre ?? '');
+    setPropietarioApellido(prop?.apellido ?? propietarioNombreCompleto?.apellido ?? '');
     setPropietarioDni(prop?.dni ?? '');
     setPropietarioDireccion(prop?.direccion ?? '');
     setPropietarioLocalidad(prop?.localidad ?? '');
     setPropietarioProvincia(prop?.provincia ?? '');
+    setPropietarioNacionalidadId(prop?.nacionalidadId ?? null);
+    setPropietarioFechaNacimiento(prop?.fechaNacimiento ?? '');
     setFormData((prevData) => ({
       ...prevData,
       testigos: editActa.testigos ?? [],
@@ -1362,6 +1686,11 @@ export function NuevaActaScreen({
     setInfractorLocalidad('');
     setInfractorProvincia('');
     setInfractorNacionalidad('');
+    setInfractorPaisId(null);
+    setInfractorProvinciaId(null);
+    setInfractorDepartamentoId(null);
+    setInfractorLocalidadId(null);
+    setInfractorSexo(null);
     setInfractorFechaNacimiento('');
     setLicenciaId(null);
     setLicenciaClase('');
@@ -1465,6 +1794,10 @@ export function NuevaActaScreen({
   setInfractorDomicilio("");
   setInfractorLocalidad("");
   setInfractorProvincia("");
+  setInfractorProvinciaId(null);
+  setInfractorDepartamentoId(null);
+  setInfractorLocalidadId(null);
+  setInfractorSexo(null);
   setInfractorPropietario(false);
   setInfractorFechaNacimiento('');
 
@@ -1490,6 +1823,8 @@ export function NuevaActaScreen({
   setPropietarioDireccion("");
   setPropietarioLocalidad("");
   setPropietarioProvincia("");
+  setPropietarioNacionalidadId(null);
+  setPropietarioFechaNacimiento('');
 
   // Ubicación
   setUbicLat('');
@@ -1538,6 +1873,11 @@ export function NuevaActaScreen({
       infractorDomicilio,
       infractorLocalidad,
       infractorProvincia,
+      infractorLocalidadId,
+      infractorProvinciaId,
+      infractorDepartamentoId,
+      infractorSexo,
+      infractorPaisId,
       infractorPropietario,
       infractorFechaNacimiento,
       licenciaId,
@@ -1557,6 +1897,8 @@ export function NuevaActaScreen({
       propietarioDireccion,
       propietarioLocalidad,
       propietarioProvincia,
+      propietarioNacionalidadId,
+      propietarioFechaNacimiento,
       ubicLat,
       ubicLng,
       ubicDepartamento,
@@ -1592,6 +1934,11 @@ export function NuevaActaScreen({
     infractorDomicilio,
     infractorLocalidad,
     infractorProvincia,
+    infractorLocalidadId,
+    infractorProvinciaId,
+    infractorDepartamentoId,
+    infractorSexo,
+    infractorPaisId,
     infractorPropietario,
     infractorFechaNacimiento,
     licenciaId,
@@ -1611,6 +1958,8 @@ export function NuevaActaScreen({
     propietarioDireccion,
     propietarioLocalidad,
     propietarioProvincia,
+    propietarioNacionalidadId,
+    propietarioFechaNacimiento,
     ubicLat,
     ubicLng,
     ubicDepartamento,
@@ -1699,6 +2048,124 @@ export function NuevaActaScreen({
         .filter((j) => j.id != null)
         .map((j) => ({ value: j.id as number, label: j.nombre })),
     [juzgados]
+  );
+  const paisOptions = useMemo(
+    () =>
+      (catalogosNuevos?.paises ?? [])
+        .map((item) => ({
+          value: Number(item.idPais ?? item.id_pais),
+          label: item.nombre,
+        }))
+        .filter((item) => Number.isFinite(item.value)),
+    [catalogosNuevos]
+  );
+  const argentinaPaisId = useMemo(
+    () => {
+      const argentina = catalogosNuevos?.paises.find(
+        (item) => item.nombre.trim().toUpperCase() === 'ARGENTINA'
+      );
+      const id = Number(argentina?.idPais ?? argentina?.id_pais);
+      return Number.isFinite(id) ? id : null;
+    },
+    [catalogosNuevos]
+  );
+  const provinciaOptions = useMemo(
+    () =>
+      (catalogosNuevos?.provincias ?? [])
+        .filter((item) => normalizeCatalogId(item.idPais ?? item.id_pais) === argentinaPaisId)
+        .map((item) => ({
+          value: normalizeCatalogId(item.idProvincia ?? item.id_provincia),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosNuevos, argentinaPaisId]
+  );
+  const departamentoOptions = useMemo(
+    () =>
+      (catalogosNuevos?.departamentos ?? [])
+        .filter((item) => normalizeCatalogId(item.idProvincia ?? item.id_provincia) === infractorProvinciaId)
+        .map((item) => ({
+          value: normalizeCatalogId(item.idDepartamento ?? item.id_departamento),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosNuevos, infractorProvinciaId]
+  );
+  const localidadOptions = useMemo(
+    () =>
+      (catalogosNuevos?.localidades ?? [])
+        .filter((item) => normalizeCatalogId(item.idDepartamento ?? item.id_departamento) === infractorDepartamentoId)
+        .map((item) => ({
+          value: normalizeCatalogId(item.idLocalidad ?? item.id_localidad),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosNuevos, infractorDepartamentoId]
+  );
+  const sexoOptions = [
+    { value: 'M', label: 'M' },
+    { value: 'F', label: 'F' },
+    { value: 'X', label: 'X' },
+  ];
+  const tipoVehiculoOptions = useMemo(
+    () =>
+      (catalogosNuevos?.tiposVehiculo ?? [])
+        .map((item) => ({
+          value: normalizeCatalogId(item.idTipoVehiculo ?? item.id_tipo_vehiculo ?? item.id_tipovehiculo),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosNuevos]
+  );
+  const marcaVehiculoOptions = useMemo(
+    () =>
+      (catalogosNuevos?.marcas ?? [])
+        .filter(
+          (item) =>
+            normalizeCatalogId(item.idTipoVehiculo ?? item.id_tipo_vehiculo ?? item.id_tipovehiculo) === vehiculoTipoId
+        )
+        .map((item) => ({
+          value: normalizeCatalogId(item.idMarca ?? item.id_marca),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosNuevos, vehiculoTipoId]
+  );
+  const modeloVehiculoOptions = useMemo(
+    () =>
+      (catalogosModelos ?? [])
+        .filter(
+          (item) => normalizeCatalogId(item.idMarca ?? item.id_marca) === vehiculoMarcaId
+        )
+        .map((item) => ({
+          value: normalizeCatalogId(item.idModelo ?? item.id_modelo),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosModelos, vehiculoMarcaId]
+  );
+  const propietarioEsArgentina = propietarioNacionalidadId === argentinaPaisId;
+  const propietarioProvinciaId = provinciaOptions.find(
+    (item) => item.label.trim().toUpperCase() === propietarioProvincia.trim().toUpperCase()
+  )?.value ?? null;
+  const propietarioDepartamentoIds = useMemo(
+    () =>
+      (catalogosNuevos?.departamentos ?? [])
+        .filter((item) => normalizeCatalogId(item.idProvincia ?? item.id_provincia) === propietarioProvinciaId)
+        .map((item) => normalizeCatalogId(item.idDepartamento ?? item.id_departamento))
+        .filter((id): id is number => id !== null),
+    [catalogosNuevos, propietarioProvinciaId]
+  );
+  const propietarioLocalidadOptions = useMemo(
+    () =>
+      (catalogosNuevos?.localidades ?? [])
+        .filter((item) => propietarioDepartamentoIds.includes(normalizeCatalogId(item.idDepartamento ?? item.id_departamento) ?? -1))
+        .map((item) => ({
+          value: normalizeCatalogId(item.idLocalidad ?? item.id_localidad),
+          label: item.nombre,
+        }))
+        .filter((item): item is { value: number; label: string } => item.value !== null),
+    [catalogosNuevos, propietarioDepartamentoIds]
   );
   const articulosOptions = useMemo(() => {
     const base = catalogos?.articulos ?? [];
@@ -2118,14 +2585,68 @@ export function NuevaActaScreen({
           </View>
           <Field label="nombre" value={infractorNombre} onChangeText={setInfractorNombre} />
           <Field label="apellido" value={infractorApellido} onChangeText={setInfractorApellido} />
-          <Field
+          <SelectField
             label="nacionalidad"
-            value={infractorNacionalidad}
-            onChangeText={setInfractorNacionalidad}
+            placeholder="Seleccioná un país"
+            value={
+              formData.infractor.idPais != null
+                ? Number(formData.infractor.idPais)
+                : paisOptions.find(
+                    (item) => item.label.trim().toUpperCase() === infractorNacionalidad.trim().toUpperCase()
+                  )?.value ?? null
+            }
+            options={paisOptions}
+            onChangeValue={(value) => {
+              const paisId = value == null ? null : Number(value);
+              const pais = catalogosNuevos?.paises.find(
+                (item) => Number(item.idPais ?? item.id_pais) === paisId
+              );
+              setInfractorNacionalidad(pais?.nombre ?? '');
+              setInfractorPaisId(paisId);
+            }}
+            disabled={!catalogosNuevos}
+            allowClear
           />
           <Field label="domicilio" value={infractorDomicilio} onChangeText={setInfractorDomicilio} />
-          <Field label="localidad" value={infractorLocalidad} onChangeText={setInfractorLocalidad} />
-          <Field label="provincia" value={infractorProvincia} onChangeText={setInfractorProvincia} />
+          <SelectField
+            label="provincia"
+            placeholder="Seleccioná una provincia"
+            value={esNacionalidadArgentina ? infractorProvinciaId : null}
+            options={provinciaOptions}
+            onChangeValue={setInfractorProvinciaId}
+            disabled={!esNacionalidadArgentina || !argentinaPaisId}
+            allowClear
+          />
+          {esNacionalidadArgentina && infractorProvinciaId ? (
+            <SelectField
+              label="departamento"
+              placeholder="Seleccioná un departamento"
+              value={infractorDepartamentoId}
+              options={departamentoOptions}
+              onChangeValue={setInfractorDepartamentoId}
+              disabled={!departamentoOptions.length}
+              allowClear
+            />
+          ) : null}
+          {esNacionalidadArgentina && infractorDepartamentoId ? (
+            <SelectField
+              label="localidad"
+              placeholder="Seleccioná una localidad"
+              value={infractorLocalidadId}
+              options={localidadOptions}
+              onChangeValue={setInfractorLocalidadId}
+              disabled={!localidadOptions.length}
+              allowClear
+            />
+          ) : null}
+          <SelectFieldString
+            label="sexo"
+            placeholder="Seleccioná el sexo"
+            value={infractorSexo}
+            options={sexoOptions}
+            onChangeValue={setInfractorSexo}
+            allowClear
+          />
           <DateFieldString
             label="fecha nacimiento"
             value={infractorFechaNacimiento}
@@ -2210,11 +2731,19 @@ export function NuevaActaScreen({
                         setPropietarioApellido(v.propietario.apellido ?? '');
                         setPropietarioDni(v.propietario.dni ?? '');
                         setPropietarioDireccion(v.propietario.direccion ?? '');
+                        setPropietarioLocalidad(v.propietario.localidad ?? '');
+                        setPropietarioProvincia(v.propietario.provincia ?? '');
+                        setPropietarioNacionalidadId(v.propietario.nacionalidadId ?? null);
+                        setPropietarioFechaNacimiento(v.propietario.fechaNacimiento ?? '');
                       } else {
                         setPropietarioNombre('');
                         setPropietarioApellido('');
                         setPropietarioDni('');
                         setPropietarioDireccion('');
+                        setPropietarioLocalidad('');
+                        setPropietarioProvincia('');
+                        setPropietarioNacionalidadId(null);
+                        setPropietarioFechaNacimiento('');
                       }
                     }}
                     style={[styles.optionRow, isSelected ? styles.optionRowActive : null]}
@@ -2229,12 +2758,19 @@ export function NuevaActaScreen({
                   setVehiculoDominio('');
                   setVehiculoMarca('');
                   setVehiculoModelo('');
+                  setVehiculoTipoId(null);
+                  setVehiculoMarcaId(null);
+                  setVehiculoModeloId(null);
                   setVehiculoIdVeh(null);
                   if (!infractorPropietario) {
                     setPropietarioNombre('');
                     setPropietarioApellido('');
                     setPropietarioDni('');
                     setPropietarioDireccion('');
+                    setPropietarioLocalidad('');
+                    setPropietarioProvincia('');
+                    setPropietarioNacionalidadId(null);
+                    setPropietarioFechaNacimiento('');
                   }
                 }}
                 style={[styles.optionRow, vehiculoSeleccionadoId === OTRO_VEHICULO_ID ? styles.optionRowActive : null]}
@@ -2256,19 +2792,36 @@ export function NuevaActaScreen({
           )}
 
           <Field label="dominio" value={vehiculoDominio} onChangeText={setVehiculoDominio} />
-          <Field label="marca" value={vehiculoMarca} onChangeText={setVehiculoMarca} />
-          <Field label="modelo" value={vehiculoModelo} onChangeText={setVehiculoModelo} />
-          <SelectFieldString
-              label="Tipo de rodado"
-              placeholder="Seleccionar tipo"
-              value={vehiculoTipoRodado}
-              options={TIPO_RODADO_ACTA.map((tipo) => ({
-                value: tipo,
-                label: tipo,
-              }))}
-              // Si llega null, guardamos un string vacío para mantener la compatibilidad
-              onChangeValue={(val) => setVehiculoTipoRodado(val ?? '')}
+          <SelectField
+            label="Tipo de vehículo"
+            placeholder="Seleccioná un tipo de vehículo"
+            value={vehiculoTipoId}
+            options={tipoVehiculoOptions}
+            onChangeValue={setVehiculoTipoId}
+            allowClear
+          />
+          {vehiculoTipoId != null ? (
+            <SelectField
+              label="Marca"
+              placeholder="Seleccioná una marca"
+              value={vehiculoMarcaId}
+              options={marcaVehiculoOptions}
+              onChangeValue={setVehiculoMarcaId}
+              disabled={!marcaVehiculoOptions.length}
+              allowClear
             />
+          ) : null}
+          {vehiculoMarcaId != null ? (
+            <SelectField
+              label="Modelo"
+              placeholder="Seleccioná un modelo"
+              value={vehiculoModeloId}
+              options={modeloVehiculoOptions}
+              onChangeValue={setVehiculoModeloId}
+              disabled={!modeloVehiculoOptions.length}
+              allowClear
+            />
+          ) : null}
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>infractor es propietario: {siNo(infractorPropietario)}</Text>
             <Switch value={infractorPropietario} onValueChange={setInfractorPropietario} />
@@ -2292,11 +2845,68 @@ export function NuevaActaScreen({
                 </Text>
               ) : null}*/
               }
-              <Field label="apellido y nombre" value={propietarioNombre} onChangeText={setPropietarioNombre} />
-              <Field label="dni" value={propietarioDni} onChangeText={setPropietarioDni} keyboardType="numeric" />
+              <Field
+                label="dni"
+                value={propietarioDni}
+                onChangeText={handlePropietarioDniChange}
+                keyboardType="numeric"
+              />
+              {isSearchingPropietario ? <Text style={styles.helperText}>Buscando propietario...</Text> : null}
+              {propietarioSearchMessage ? (
+                <Text style={propietarioSearchMessage.includes('Error') ? styles.errorText : styles.helperText}>
+                  {propietarioSearchMessage}
+                </Text>
+              ) : null}
+              <Field label="apellido" value={propietarioApellido} onChangeText={setPropietarioApellido} />
+              <Field label="nombre" value={propietarioNombre} onChangeText={setPropietarioNombre} />
               <Field label="direccion" value={propietarioDireccion} onChangeText={setPropietarioDireccion} />
-              <Field label="localidad" value={propietarioLocalidad} onChangeText={setPropietarioLocalidad} />
-              <Field label="provincia" value={propietarioProvincia} onChangeText={setPropietarioProvincia} />
+              <Field
+                label="fecha de nacimiento"
+                value={propietarioFechaNacimiento}
+                onChangeText={setPropietarioFechaNacimiento}
+                placeholder="yyyy-mm-dd"
+              />
+              <SelectField
+                label="nacionalidad"
+                placeholder="Seleccioná un país"
+                value={propietarioNacionalidadId != null && propietarioNacionalidadId > 0 ? propietarioNacionalidadId : null}
+                options={paisOptions}
+                onChangeValue={setPropietarioNacionalidadId}
+                disabled={!catalogosNuevos}
+                allowClear
+              />
+              {propietarioEsArgentina ? (
+                <>
+                  <SelectField
+                    label="provincia"
+                    placeholder="Seleccioná una provincia"
+                    value={propietarioProvinciaId}
+                    options={provinciaOptions}
+                    onChangeValue={(value) => {
+                      const provincia = provinciaOptions.find((item) => item.value === value);
+                      setPropietarioProvincia(provincia?.label ?? '');
+                      setPropietarioLocalidad('');
+                    }}
+                    allowClear
+                  />
+                  <SelectField
+                    label="localidad"
+                    placeholder="Seleccioná una localidad"
+                    value={
+                      propietarioLocalidadOptions.find(
+                        (item) => item.label.trim().toUpperCase() === propietarioLocalidad.trim().toUpperCase()
+                      )?.value ?? null
+                    }
+                    options={propietarioLocalidadOptions}
+                    onChangeValue={(value) => {
+                      const localidad = propietarioLocalidadOptions.find((item) => item.value === value);
+                      setPropietarioLocalidad(localidad?.label ?? '');
+                    }}
+                    disabled={!propietarioLocalidadOptions.length}
+                    allowClear
+                  />
+                </>
+              ) : null}
             </View>
           ) : null}
         </Section>
@@ -2722,6 +3332,11 @@ function buildActaRequestSafe(input: {
   infractorDomicilio: string;
   infractorLocalidad: string;
   infractorProvincia: string;
+  infractorLocalidadId: number | null;
+  infractorProvinciaId: number | null;
+  infractorDepartamentoId: number | null;
+  infractorSexo: string | null;
+  infractorPaisId: number | null;
   infractorPropietario: boolean;
   infractorFechaNacimiento: string;
   licenciaId: number | null;
@@ -2741,6 +3356,8 @@ function buildActaRequestSafe(input: {
   propietarioDireccion: string;
   propietarioLocalidad: string;
   propietarioProvincia: string;
+  propietarioNacionalidadId: number | null;
+  propietarioFechaNacimiento: string;
   ubicLat: string;
   ubicLng: string;
   ubicDepartamento: string;
@@ -2770,12 +3387,15 @@ function buildActaRequestSafe(input: {
         input.propietarioLocalidad.trim() &&
         input.propietarioProvincia.trim()
         ? {
-            nombre: input.propietarioNombre.trim(),
-            apellido: input.propietarioApellido.trim() || undefined,
+            nombre: [input.propietarioApellido.trim(), input.propietarioNombre.trim()]
+              .filter(Boolean)
+              .join(', '),
             dni: input.propietarioDni.trim(),
             direccion: input.propietarioDireccion.trim(),
             localidad: input.propietarioLocalidad.trim(),
             provincia: input.propietarioProvincia.trim(),
+            nacionalidadId: input.propietarioNacionalidadId ?? 0,
+            fechaNacimiento: input.propietarioFechaNacimiento.trim() || null,
           }
         : null;
 
@@ -2795,8 +3415,23 @@ function buildActaRequestSafe(input: {
       dni: input.infractorDni,
       nacionalidad: input.infractorNacionalidad,
       domicilio: input.infractorDomicilio,
-      localidad: input.infractorLocalidad || undefined,
-      provincia: input.infractorProvincia,
+      localidad: input.infractorNacionalidad.trim().toUpperCase() === 'ARGENTINA'
+        ? input.infractorLocalidad || null
+        : null,
+      provincia: input.infractorNacionalidad.trim().toUpperCase() === 'ARGENTINA'
+        ? input.infractorProvincia || null
+        : null,
+      localidadId: input.infractorNacionalidad.trim().toUpperCase() === 'ARGENTINA'
+        ? input.infractorLocalidadId
+        : null,
+      provinciaId: input.infractorNacionalidad.trim().toUpperCase() === 'ARGENTINA'
+        ? input.infractorProvinciaId
+        : null,
+      departamentoId: input.infractorNacionalidad.trim().toUpperCase() === 'ARGENTINA'
+        ? input.infractorDepartamentoId
+        : null,
+      idPais: input.infractorPaisId,
+      sexo: input.infractorSexo,
       fechaNacimiento: ddMmYyyyToIso(input.infractorFechaNacimiento),
       licencia:
         input.licenciaId ||

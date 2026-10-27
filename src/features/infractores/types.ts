@@ -19,17 +19,28 @@ export interface Vehiculo {
   propietario: Propietario | null;
   infractorPropietario: boolean;
   tipoRodado?: string | null;
+  idTipoVehiculo?: number | null;
+  id_tipo_vehiculo?: number | null;
+  idMarca?: number | null;
+  id_marca?: number | null;
+  idModelo?: number | null;
+  id_modelo?: number | null;
 }
 
 export interface Infractor {
-  idInfrac: number;
+  idInfrac?: number | null;
   nombre: string; // suele venir como "apellido, nombre"
   apellido?: string | null;
   dni: string;
   domicilio: string;
   nacionalidad?: string | null;
+  idPais?: number | null;
   localidad?: string | null;
   provincia?: string | null;
+  localidadId?: number | null;
+  provinciaId?: number | null;
+  departamentoId?: number | null;
+  sexo?: string | null;
   fechaNacimiento?: string | null; // YYYY-MM-DD (si viene)
   lugar?: string | null;
   propietario?: boolean;
